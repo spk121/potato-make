@@ -108,7 +108,11 @@ Target rules are defined and manipulated with the following commands.
 list.  There are 3 components
 
 - NAME is a string that names the target.  If this rule is being used
-  to create a file, NAME is the name of the file to be output
+  to create a file, NAME is the name of the file to be output.
+  
+  NAME can also be a predicate procedure that maps string->boolean.
+  But if NAME is a procedure, this rule cannot be used at the
+  top-level target of a build.
 - PREREQUISITES, if provided, is a list of strings or procedures of
   zero arguments that evaluate to strings.  Each entry is the
   name of a target that needs to be exist before this target is
@@ -237,10 +241,20 @@ above.
 list.  There are 3 components
 
 - SOURCE-SUFFIX is a string that names the filename suffix of the file
-  used to create the target.
+  used to create the target. Commonly, this string begins with a
+  period.
+  
+  SOURCE-SUFFIX can also be a conversion procedure that takes
+  in a target name string and converts it into a source name string.
+  
 - TARGET-SUFFIX, is a string that is the filename suffix of the file
   to be created.  The TARGET-SUFFIX could be an empty string,
   indicating that the target is just the basename with no suffix.
+  
+  TARGET-SUFFIX can also be a predicate procedure that takes in a
+  potential target name string and returns `#t` or `#f` if the target
+  name string should be processed with this suffix rule.
+  
 - COMMANDS, if provided, are recipes that will be executed that are
   intended to cause the target to be created.  The recipe can be
   either a string or a procedure.
@@ -273,8 +287,8 @@ Example suffix rules are
 ## makevars
 
 Makefile scripts may take advantage of a special variable type
-called a makevar.  In scheme terms, makevars are entries in a hash
-table.
+called a makevar.  In scheme terms, makevars are entries in a 
+`%makevars` hash table that have special accessor syntax.
 
 - The makevar names -- the keys -- are strings.
 - The makevar values are either strings or procedures that take no
@@ -298,84 +312,85 @@ is set, category 1 variables *do not* override variables from categories
 
 The library provides the following procedures for makevars
 
-    
     lazy-assign key [val]
     
-`lazy-assign` sets a entry in the makevars hash table.  KEY must be a
-string or a thunk that evaluates to a string.  Likewise VAL must be a
-string or a thunk that evaluates to a string.
-        
-If KEY is a thunk, it is immediately evaluated to a string to use as
-the key in the hash table entry.
-        
-If VAL is a thunk, it is stored as a *promise* to be evaluated
-later. The promise will be evaluated the first time this key is
-referenced.
-        
-If VAL is not given, the empty string will be used.
+> `lazy-assign` sets a entry in the makevars hash table.  KEY must be
+> a string or a thunk that evaluates to a string.  Likewise VAL must
+> be a string or a thunk that evaluates to a string.
+
+> If KEY is a thunk, it is immediately evaluated to a string to use as
+> the key in the hash table entry.
+
+> If VAL is a thunk, it is stored as a *promise* to be evaluated
+> later. The promise will be evaluated the first time this key is
+> referenced.
+
+> If VAL is not given, the empty string will be used.
         
     ?= key [val]
     
-This is a syntax version of lazy-assign where KEY should be
-a string without quotes, e.g.
+> This is a syntax version of lazy-assign where KEY should be a string
+> without quotes, e.g.
         
         (?= foo "bar")  ==>  (lazy-assign "foo" "bar")
     
     assign key [val]
     
-`assign` is the same as `lazy-assign` above, except that if VAL is a
-thunk it is immediately evaluated to a string and that string is used
-as the value in the hash table entry.
+> `assign` is the same as `lazy-assign` above, except that if VAL is a
+> thunk it is immediately evaluated to a string and that string is
+> used as the value in the hash table entry.
         
     := key [val]
     
-This is a syntax version of `assign` where KEY should be
-a string without quotes, e.g.
+> This is a syntax version of `assign` where KEY should be a string
+> without quotes, e.g.
         
         (:= foo "bar")  ==>  (assign "foo" "bar")
 
     reference key [transformer]
 
-`reference` looks up KEY in the `%makevar` hash table.  If it is found,
-VALUE is returned as a string.  If it is not found, `#f` is returned.
+> `reference` looks up KEY in the `%makevar` hash table.  If it is
+> found, VALUE is returned as a string.  If it is not found, `#f` is
+> returned.
         
-If the value was stored using `lazy-assign` and is a *promise*, this
-procedure is *forced* to return a string.  Also, the value in the hash
-table is updated to this string.
+> If the value was stored using `lazy-assign` and is a *promise*, this
+> procedure is *forced* to return a string.  Also, the value in the
+> hash table is updated to this string.
 
-The optional `transfomer` should be a function the takes a string
-and returns a string. It will be applied to every space-separated word
-in the value.
+> The optional `transfomer` should be a function the takes a string
+> and returns a string. It will be applied to every space-separated
+> word in the value.
 
     $ key
     
-This is a syntax version of `reference`, where KEY should be a
-string without quotes, e.g.
+> This is a syntax version of `reference`, where KEY should be a
+> string without quotes, e.g.
         
         ($ key) ==> (reference "key")
         
     reference-func key
     
-`reference-func` returns a procedure of zero arguments that
-will, when called, look up a key as described in `reference` above.
+> `reference-func` returns a procedure of zero arguments that will,
+> when called, look up a key as described in `reference` above.
         
     $$ key
     
-This is a syntax version of reference-func, where KEY should be a
-string without quotes, e.g.
+> This is a syntax version of reference-func, where KEY should be a
+> string without quotes, e.g.
         
         ($$ key) ==> (reference-func "key")
 
     %makevars
     
-This is the hash table.  You are not meant to access it directly, but,
-with the functions above.  If you do use it directly, the VALUE is a
-cons where the CAR is string or promise and the CDR is private data.
+> This is the hash table.  You are not meant to access it directly,
+> but, with the functions above.  If you do use it directly, the VALUE
+> is a cons where the CAR is string or promise and the CDR is private
+> data.
 
     %environment-overrides?
     
-This boolean variable, when `#t` prevents `lazy-assign` and `assign`
-from overwriting a *makevar* set by the environment.
+> This boolean variable, when `#t` prevents `lazy-assign` and `assign`
+> from overwriting a *makevar* set by the environment.
         
 ## The build algorithm
 
@@ -383,9 +398,9 @@ The initial target is given on the command line. If no target was
 given on the command line, the first entry in the target list is used.
 
 For each top-level target, create a n-ary tree of prerequisites.  If a
-target doesn't have an explicit rule, but has a suffix in SUFFIXES,
-add the implicit rule prerequisite. Continue until the tree is
-populated.
+target doesn't have an explicit rule, but has a suffix that appears in
+one or more suffix rules, it searches for possible prerequisites that
+would fulfill a suffix rule. Continue until the tree is populated.
 
 Then for each node, try to compute timestamps for each target, if they
 exist.
