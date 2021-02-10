@@ -312,7 +312,7 @@ space-separated token in the looked-up value."
       ((_ key)
        #'(reference (symbol->string (syntax->datum #'key)))))))
 
-(define* (reference-func key)
+(define (reference-func key)
   "Looks up KEY in the %makevars hash table. KEY shall be a string
 or a procedure that evaluates to a string.
     If the value of the key
@@ -346,4 +346,4 @@ that string."
   (lambda (stx)
     (syntax-case stx ()
       ((_ key)
-       #'(reference (symbol->string (syntax->datum #'key)))))))
+       #'(reference-func (symbol->string (syntax->datum #'key)))))))
