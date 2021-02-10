@@ -108,6 +108,7 @@ Note that the prerequisites is *not* a list.
      
      $@    the target
      $*    the target w/o a filename suffix
-     $^    the prerequisites, as a single string
+     $^    the prerequisites, as a single space-separated string
      $<    the first prerequisite
      $?    the prerequisites that are files newer than the target file
+           as a single space-separated string
