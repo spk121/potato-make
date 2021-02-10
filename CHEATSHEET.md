@@ -19,7 +19,11 @@ The rules go in between `initialize` and `build`
 
 ## MAKEVARS
 
-A hash table called `%makevars` has string keys.
+A hash table called `%makevars` has string keys. These procedures
+are syntax that add quotation marks around `key`, so you call them without the quotes on
+`key`. The returned value is a string.
+
+    ($ KEY) -> "VAL"
 
     ($ key [transformer])
         Look up `key` in the `%makevars` hash table and return the result.
