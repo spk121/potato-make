@@ -117,3 +117,9 @@ a target file, based on the filename extensions.
            as a single space-separated string
      $$?   the prerequisites that are files newer than the target file
            as a scheme list of strings
+           
+     There are quoted variants to all the above, where each target
+     or prerequisite string is placed within double quotation marks, as might
+     be required for filenames or paths that contain spaces.
+     
+     Q@ Q* Q< Q^ QQ^ Q? QQ?
