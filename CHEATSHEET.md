@@ -21,7 +21,7 @@ The rules go in between `initialize` and `build`
 
 A hash table called `%makevars` has string keys. These procedures
 are syntax that add quotation marks around `key`, so you call them without the quotes on
-`key`. The returned value is a string.
+`key`. The returned value of `$` is a string, or an empty string on failure.
 
     ($ KEY) -> "VAL"
 
@@ -29,11 +29,9 @@ are syntax that add quotation marks around `key`, so you call them without the q
         Look up `key` in the `%makevars` hash table and return the result.
         If a string-to-string transformer procedure is provided, apply it to each
         space-separated token in the result.
-    ($$ key)
-        Returns a procedure that looks up `key` in the `%makevars` hash table.
     (?= key val)
         Assign `val` to `key` in the `%makevars` hash table. If `val` is a procedure,
-         assign its output to `key` the first time that `key` is referenced.
+        assign its output to `key` the first time that `key` is referenced.
     (:= key val)
         Assign `val` to `key` in the `%makevars` hash table. If `val` is a procedure,
         evaluate it and assign its output to `key` immediately.
@@ -59,14 +57,16 @@ have filenames or phony names.
      Recipe as a procedure
      
      (: "clean-foo" '()
-       (delete-file "foo.o")
+       (lambda ()
+         (delete-file "foo.o")))
        
      Recipe as a procedure that returns #f to indicate failure
      
      (: "recent" '()
-       (if condition
-         #t
-         #f))
+       (lambda ()
+         (if condition
+           #t
+           #f))))
        
      Recipe as a procedure returning a string to be evaluated by the system
      
@@ -108,7 +108,10 @@ Note that the prerequisites is *not* a list.
      
      $@    the target
      $*    the target w/o a filename suffix
-     $^    the prerequisites, as a single space-separated string
      $<    the first prerequisite
+     $^    the prerequisites, as a single space-separated string
+     $$^   the prerequisites, as a scheme list of strings
      $?    the prerequisites that are files newer than the target file
            as a single space-separated string
+     $$?   the prerequisites that are files newer than the target file
+           as a scheme list of strings
