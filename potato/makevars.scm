@@ -3,10 +3,10 @@
   #:use-module (ice-9 format)
   #:use-module (potato exceptions)
   #:use-module (potato builtins)
-  #:use-module (potato ecma48)
+  #:use-module (potato text)
   #:export (initialize-makevars
             %makevars
-            %environment-overrides?
+            %elevate-environment?
             lazy-assign    ?=
             assign         :=
             reference      $
@@ -24,11 +24,12 @@
 ;; The lower priority level always win, unless the '-e' flag was set
 ;; If the '-e' flag is set level 1 doesn't override level 3 and 4.
 
+(define %ascii? #f)
 (define %makevars #f)
-(define %environment-overrides? #f)
-(define %debug? #t)
+(define %elevate-environment? #f)
+(define %verbose? #t)
 (define (debug spec . args)
-  (when %debug?
+  (when %verbose?
     (apply format (append (list #t spec) args))))
 
 
@@ -53,7 +54,7 @@ later equals signs."
 (define (override? old-priority new-priority)
   "The logic of whether which makemacro priority levels can override
 others."
-  (if %environment-overrides?
+  (if %elevate-environment?
       (if (and (or (= old-priority) (= old-priority 3) (= old-priority 4))
                (= new-priority 1))
           #f
@@ -129,9 +130,9 @@ the value of MAKEFLAGS or SHELL."
 (define (dump-makevars)
   "Write out a list of the current makevars."
   (when (not (zero? (hash-count (const #t) %makevars)))
-    (underline)
+    (display (underline))
     (display "Makevars")
-    (reset)
+    (display (default))
     (newline)
     (let ((keyvals
            (sort
@@ -140,56 +141,64 @@ the value of MAKEFLAGS or SHELL."
               (string<? (car a) (car b))))))
       (for-each
        (lambda (keyval)
-         (let* ((key (car keyval))
-                (val (cdr keyval))
-                (part1 (if (zero? (string-length (car val)))
-                           (string-copy key)
-                           (string-append key " → " (car val))))
-                (part1-trunc
-                 (if (> (string-length part1) 50)
-                     (string-append (substring part1 0 50) "…")
-                     part1))
-                (part2 (make-string (- 54 (string-length part1-trunc))
-                                    #\space))
-                (priority (cdr val))
-                (part3 (list-ref '("unknown"
-                                   "script"
-                                   "command line"
-                                   "MAKEFLAGS"
-                                   "environment"
-                                   "built-in")
-                                 priority)))
-           (string-map!
-            (lambda (c)
-              (if (char<? c #\space)
-                  ;; Replace control codes with control pictures
-                  (integer->char (+ #x2400 (char->integer c)))
-                  c))
-            part1)
-           (display "  ")
-           (display part1-trunc)
-           (display part2)
-           (display part3)
-           (newline)))
-       keyvals))))
-
+         (let ((key (car keyval))
+               (val (cdr keyval)))
+           (let ((keyval-string
+                  (if (zero? (string-length (car val)))
+                      (string-copy key)
+                      (string-append key " " (right-arrow) " " (car val)))))
+             ;; Replace any control characters in VAL, like newline or tab
+             (set! keyval-string
+               (string-fold
+                (lambda (c str)
+                  (string-append str
+                                 (if (char<? c #\space)
+                                     (C0 c)
+                                     (string c))))
+                  ""
+                  keyval-string))
+             ;; Truncate
+             (if (> (string-length keyval-string) 60)
+                 (if %ascii?
+                     (set! keyval-string
+                       (string-append (substring keyval-string 0 57) "..."))
+                     (set! keyval-string
+                       (string-append (substring keyval-string 0 59) "…"))))
+             (let* ((space (make-string (- 64 (string-length keyval-string))
+                                        #\space))
+                    (priority (cdr val))
+                    (source-string (list-ref '("unknown"
+                                               "script"
+                                               "command line"
+                                               "MAKEFLAGS"
+                                               "environment"
+                                               "built-in")
+                                             priority)))
+               (display "  ")
+               (display keyval-string)
+               (display space)
+               (display source-string)
+               (newline)))))
+           keyvals))))
 
 (define (initialize-makevars keyvals
-                             elevate-env-vars?
-                             ignore-environment?
-                             no-builtins?
-                             debug?)
-  (set! %environment-overrides? elevate-env-vars?)
+                             environment?
+                             elevate-environment?
+                             builtins?
+                             verbose?
+                             ascii?)
+  (set! %elevate-environment? elevate-environment?)
   (set! %makevars (make-hash-table))
-  (set! %debug? debug?)
-  (unless no-builtins?
+  (set! %verbose? verbose?)
+  (set! %ascii? ascii?)
+  (when builtins?
     (makevars-add-builtins))
-  (makevars-add-environment)
-  (makevars-add-makeflags)
+  (when environment?
+    (makevars-add-environment)
+    (makevars-add-makeflags))
   (makevars-add-keyvals keyvals)
-  (when %debug?
-    (dump-makevars))
-  )
+  (when %verbose?
+    (dump-makevars)))
 
 ;; API
 (define* (lazy-assign key #:optional (val ""))
@@ -213,7 +222,7 @@ referenced.
     (unless (string? KEY)
       (bad-proc-output "lazy-assign" key))
     (makevars-set KEY VAL)
-    (when (and %debug? (string? VAL))
+    (when (and %verbose? (string? VAL))
       (format #t "~A=~A~%" KEY VAL))))
 
 (define-syntax ?=
@@ -244,7 +253,7 @@ string to use as the key in the hash table entry.
     (unless (string? VAL)
       (bad-proc-output "assign" VAL))
     (makevars-set KEY VAL)
-    (when %debug?
+    (when %verbose?
       (format #t "~A=~A~%" KEY VAL))))
 
 (define-syntax :=
@@ -287,7 +296,7 @@ space-separated token in the looked-up value."
             (unless (string? val)
               (bad-proc-output "reference" val))
             (hash-set! %makevars key (cons val priority))
-            (when %debug?
+            (when %verbose?
               (format #t "~A=~A~%" key val)))
           (when (procedure? transformer)
             (set! val (string-append-with-spaces
@@ -327,7 +336,7 @@ that string."
           (if (promise? val)
               (lambda ()
                 (let ((VAL (force val)))
-                  ;; FIXME: put debug print here?
+                  ;; FIXME: put verbose print here?
                   VAL))
             ;; else
             (lambda ()

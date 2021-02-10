@@ -7,6 +7,7 @@
   #:use-module (potato exceptions)
   #:use-module (potato makevars)
   #:use-module (potato rules)
+  #:use-module (potato text)
   #:export (initialize
             execute
             )
@@ -74,29 +75,39 @@
     (apply format (append (list #t spec) args))))
 
 (define option-spec
-  '((help             (single-char #\h) (value #f))
-    (version          (single-char #\v) (value #f))
-    (quiet            (single-char #\q) (value #f))
-    (verbose          (single-char #\V) (value #f))
-    (ignore-environment                 (value #f))
-    (no-builtins      (single-char #\r) (value #f))
-    (elevate-environment (single-char #\e) (value #f))
-    (ignore-errors    (single-char #\i) (value #f))
+  '((help              (single-char #\h) (value #f))
+    (version           (single-char #\v) (value #f))
+    (quiet             (single-char #\q) (value #f))
+    (verbose           (single-char #\V) (value #f))
+    (environment       (single-char #\e) (value #f))
+    (elevate-environment (single-char #\E) (value #f))
+    (builtins          (single-char #\b) (value #f))
+    (ignore-errors                       (value #f))
     (continue-on-error (single-char #\k) (value #f))
-    ;;(dump-macros      (single-char #\p) (value #f))
-    ;;(no-builtins      (single-char #\r) (value #f))
-    ;;(silent           (single-char #\s) (value #f))
+    (no-execution      (single-char #\n) (value #f))
+    (ascii             (single-char #\A) (value #f))
     ))
 
 (define (display-help-and-exit argv0)
-  (format #t "~A [-hvVr] [KEY=VALUE ...] [targets ...]~%" argv0)
-  (format #t "    -h, --help         print help and exit~%")
-  (format #t "    -v, --version      print version and exit~%")
-  (format #t "    -q, --quiet        print minimal output~%")
-  (format #t "    -V, --verbose      print maximum output~%")
-  (format #t "    --ignore-environment~%")
-  (format #t "                       ignore environment variables~%")
-  (format #t "    -r, --no-builtins  no default or built-in rules~%")
+  (format #t "~A [-hvqVeEbn] [KEY=VALUE ...] [targets ...]~%" argv0)
+  (format #t "    -h, --help                     print help and exit~%")
+  (format #t "    -v, --version               print version and exit~%")
+  (format #t "    -q, --quiet                   print minimal output~%")
+  (format #t "    -V, --verbose                 print maximum output~%")
+  (format #t "    -e, --environment        use environment variables~%")
+  (format #t "    -E, --elevate-environment~%")
+  (format #t "                     use environment variables and let~%")
+  (format #t "                        them override script variables~%")
+  (format #t "    -b, --builtins~%")
+  (format #t "        include some common variables and suffix rules~%")
+  (format #t "    --ignore-errors~%")
+  (format #t "                   keep building even if commands fail~%")
+  (format #t "    -k, --continue-on-error~%")
+  (format #t "                   keep building even if commands fail~%")
+  (format #t "    -n, --no-execution~%")
+  (format #t "         only execute rules marked as 'always execute'~%")
+  (format #t "    -a, --ascii~%")
+  (format #t "                       ASCII only output and no colors~%")
   (exit 0))
 
 (define (display-version-and-exit argv0)
@@ -130,36 +141,38 @@ return them in a list."
    lst))
 
 (define* (initialize #:optional
-                     (arguments '())
-                     (ignore-environment 'unknown))
-  "Set up the options, built-in rules, and built-in makevars.  If
-IGNORE_ENVIRONMENT is #t or #f, don't parse environment variables,
-despite the setting of any ignore-environment flag."
+                     (arguments '()))
+  "Set up the options, rules, and makevars. If ARGUMENTS
+is not set, it will use options, makevars, and targets as
+specified by the command line.  If it is set, it is
+expected to be a list of strings that are command-line
+arguments."
 
   (when (null? arguments)
     (set! arguments (program-arguments)))
 
   ;; We start of with the --help and --version command-line arguments.
   (let ((options (getopt-long arguments option-spec))
+        (%opt-builtins #f)
+        (%opt-environment #f)
         (%opt-elevate-environment #f)
-        (%opt-no-builtins #f)
-        (%opt-ignore-environment #f))
+        (%opt-no-errors #f)
+        (%opt-continue-on-error #f)
+        (%opt-no-execution #f)
+        (%opt-ascii #f))
     (when (option-ref options 'help #f)
       (display-help-and-exit (car arguments)))
     (when (option-ref options 'version #f)
       (display-version-and-exit (car arguments)))
 
-    ;; Then, we do --ignore-environment, because we need to know that
+    ;; Then, we do --environment, because we need to know that
     ;; before we start parsing MAKEFLAGS
-    (if (eqv? ignore-environment 'unknown)
-        (set! %opt-ignore-environment
-          (option-ref options 'ignore-environment #f))
-        ;; else
-        (set! %opt-ignore-environment ignore-environment))
+    (set! %opt-environment
+      (option-ref options 'environment #f))
 
     ;; Parse MAKEFLAGS before the command-line, because we want
     ;; command-line options to override MAKEFLAGS options.
-    (unless %opt-ignore-environment
+    (when %opt-environment
       (let ((mf (getenv "MAKEFLAGS")))
         (when mf
           (let ((tokens (string-tokenize mf)))
@@ -169,8 +182,16 @@ despite the setting of any ignore-environment flag."
             (when (member "verbose" tokens)
               (set! %opt-verbose #t)
               (set! %opt-quiet #f))
-            (when (member "no-builtins" tokens)
-              (set! %opt-no-builtins #t))))))
+            (when (member "builtins" tokens)
+              (set! %opt-builtins #t))
+            (when (member "ascii" tokens)
+              (set! %opt-ascii #t))
+            (when (member "ignore-errors" tokens)
+              (set! %opt-ignore-errors #t))
+            (when (member "continue-on-error" tokens)
+              (set! %opt-continue-on-error #t))
+            (when (member "no-execution" tokens)
+              (set! %opt-no-execution #t))))))
 
     ;; Now the bulk of the command-line options.
     (when (option-ref options 'quiet #f)
@@ -179,25 +200,30 @@ despite the setting of any ignore-environment flag."
     (when (option-ref options 'verbose #f)
       (set! %opt-verbose #t)
       (set! %opt-quiet #f))
-    (set! %opt-no-builtins
-      (option-ref options 'no-builtins #f))
+    (set! %opt-builtins
+      (option-ref options 'builtins #f))
     (set! %opt-elevate-environment
       (option-ref options 'elevate-environment #f))
     (set! %opt-ignore-errors
       (option-ref options 'ignore-errors #f))
     (set! %opt-continue-on-error
       (option-ref options 'continue-on-error #f))
+    (set! %opt-no-execution
+      (option-ref options 'no-execution #f))
+    (set! %opt-ascii
+      (option-ref options 'ascii #f))
 
     ;; Now that all the options are set, we can set up
     ;; the build environment.
     (let ((extra (option-ref options '() '())))
-
+      (initialize-text %opt-ascii)
       (initialize-makevars (parse-macros extra)
+                           %opt-environment
                            %opt-elevate-environment
-                           %opt-ignore-environment
-                           %opt-no-builtins
-                           %opt-verbose)
-      (initialize-rules %opt-no-builtins
+                           %opt-builtins
+                           %opt-verbose
+                           %opt-ascii)
+      #;(initialize-rules %opt-no-builtins
                         %opt-verbose)
       
       ;; The remaining command-line words are the build targets that

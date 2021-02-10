@@ -47,19 +47,31 @@ is named `makefile.scm`; however, you may choose any name.
 This boilerplate loads the library functions and it parses the
 command-line arguments.  The command-line arguments are the following,
 
-    makefile.scm [-efiknprs] [var=value...] [target_name...]
-             -e  makevars from the environment override makefiles
-                 in the script.
-             -f  rebuild even if the prerequisite timestamps are
-                 earlier than the target timestamps
-             -i  ignore error codes return from system commands
-             -k  continue to update other targets that don't depend
-                 on a target that has reported a non-ignored error
-             -n  write commands to be executed, but, do not execute
-                 them
-             -p  write debug output
-             -r  do not use any built-in rules
-             -s  use a terse output
+    makefile.scm [-hvqVeEbknB] [var=value...] [target_name...]
+             -h, --help
+                 displays help
+             -v, --version
+                 displays the version number of this script
+             -q, --quiet
+                 use a terse output format
+             -V, --verbose
+                 use a verbose output format
+             -e, --environment
+                 environment variables are converted to makevars
+             -E, --elevate-environment
+                 environment variables are converted to makevars
+                 and will override makevars set in the script
+             -b, --builtins
+                 adds some default makevars and suffix rules
+             --ignore-errors
+                 keep building even if a command fails
+             -k, --continue-on-error
+                 keep building some targets even if a command fails
+             -n, --no-execute
+                 print rules, but only execute rules marked as
+                 'always execute'
+             -B, --boring
+                 use ASCII-only output and no colors
              
              [var=value...]
                set the value of makevars
@@ -67,6 +79,11 @@ command-line arguments.  The command-line arguments are the following,
                Set one or more targets to be executed.  If no target
                is specified, the first target found will be executed.
 
+Note that in POSIX `make`, it, by default, adds in environment
+variables and built-in rules.  With this library, these require
+command-line arguments to be enabled to pick up environment variables
+and built-in rules.  This is to make this tool more appropriate for
+generating *reproducible builds*.
 
 ## Environment Variables
 
@@ -125,7 +142,8 @@ list.  There are 3 components
 If the COMMAND recipe is a string, it will be passed to the `system`
 procedure for execution by the shell. If any call to system returns a
 non-zero return value, processing will end. (This behavior is modified
-by the '-i' and '-k' command-line arguments.)
+by the `--ignore-errors` and `--continue-on-error` command-line
+arguments.)
 
 If the COMMAND recipe is a procedure, it will be executed.  If it
 returns `#f` or a non-zero integer, failure is assumed.  If the
@@ -134,14 +152,14 @@ COMMAND recipe returns a string, the resulting string is passed to
 
 If the COMMAND recipe is a pair, and the CAR of the pair is one of
 `'ignore-error`, `'silent`, or `'always-execute`, it will have the
-extra effect of ignoring errors, not printing the command line,
-or always executing even when the `-n` option is enabled.  The CDR
-must be a string or procedure as above.
+extra effect of ignoring errors, not printing the command line, or
+always executing even when the `--no-execution` option is enabled.
+The CDR must be a string or procedure as above.
 
 There are a set of helper functions and variables that can be used to
 construct recipes.
 
-    compose element ...
+    string-compose element ...
     ~ element ...
     ignore-error-compose element ...
     ~- element ...
@@ -150,21 +168,28 @@ construct recipes.
     always-execute-compose element ...
     ~+ element ...
 
-`compose` (aka `~`) takes as arguments one or more elements, each of which
-is a string or a procedure of zero arguments that returns a string. It
-executes any procedure arguments and concatenates the resulting
-strings, appending spaces in between them.
+`string-compose` (aka `~`) takes as arguments one or more elements. It
+converts the elements to strings and concatenates the strings,
+appending spaces between them. The conversion to strings happens as if
+by `display`.
 
-`ignore-error-compose` (aka `~-`) is like compose but returns a pair
-with the first argument of `'ignore-error`. When passed as a recipe,
-it causes the recipe not to end execution, even if an error is
+For elements that are procedures, they are executed and their result
+is used instead.
+
+It is returned as a pair, where the `car` is the symbol `'default`.
+That symbol is interpreted by the builder.
+
+`ignore-error-compose` (aka `~-`) is like string-compose but returns a
+pair with the first argument of `'ignore-error`. When passed as a
+recipe, it causes the recipe not to end execution, even if an error is
 signaled.
 
-`silent-compose` (aka `~@`) is like compose, but, it does not print
-the resulting string to the output port.
+`silent-compose` (aka `~@`) is like string-compose, but, it does not
+print the resulting string to the output port, except in verbose mode.
 
-`always-execute-compose` (aka `~+`) is like compose, but, it forces the line
-to always be executed, even if the `-n` option was chosen.
+`always-execute-compose` (aka `~+`) is like compose, but, it forces
+the line to always be executed, even if the `--no-execution` option
+was chosen.
         
     target-name
     $@
@@ -237,7 +262,7 @@ above.
     suffix-rule source-suffix target-suffix [commands...]
     -> source-suffix target-suffix [commands ...]
     
-`suffix-rule` (aka `->`) adds a suffix rule to the suffix rule
+`suffix-rule` (aka `->` or `→`) adds a suffix rule to the suffix rule
 list.  There are 3 components
 
 - SOURCE-SUFFIX is a string that names the filename suffix of the file
