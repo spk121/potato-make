@@ -51,30 +51,31 @@ have filenames or phony names.
      `target-name` is a string which is either a filename to be created
      or an phony name like "all" or "clean".
      
-     recipe as a string
+     Recipe as a string to be evaluated by the system
      
      (: "foo.o" '("foo.c")
        "cc -c foo.o")
      
-     recipe as a procedure
+     Recipe as a procedure
      
      (: "clean-foo" '()
        (delete-file "foo.o")
        
-     recipe as a procedure that returns #f to indicate failure
+     Recipe as a procedure that returns #f to indicate failure
      
      (: "recent" '()
        (if condition
          #t
          #f))
        
-     recipe as procedure returning string
+     Recipe as a procedure returning a string to be evaluated by the system
      
      (: "foo.o" '("foo.c")
        (lambda ()
          (format #f "cc ~A -c foo.c" some-flags))
          
-     recipe using recipe helper procedures
+     Recipe using recipe helper procedures, which create a string to be
+     evaluated by the system
      
      (: "foo.c" '("foo.c")
        (~ ($ CC) ($ CFLAGS) "-c" $<))
@@ -85,16 +86,18 @@ Note that the prerequisites is *not* a list.
      (-> ".c" ".o"
        (~ ($ CC) ($ CFLAGS) ".c" $<))
        
-# RECIPE HELPER
+# RECIPE HELPERS
 
      Concatenate elements with `~`. `~` inserts spaces between the elements.
      Elements can be
-     - strings, characters, or numbers
+     - strings
      - procedures that return strings
-     - `makevar` hash-table references
+     - `%makevar` hash-table references
      - special variables
+     - anything whose string representation as created by
+       (format #f "~A" ...) make sense
      
-     (~ "string" (lambda () "string") ($ KEY) $@ )
+     (~ "string" (lambda () "string") ($ KEY) $@ 100 )
      
      Three versions of `~` with special effects
      (~- ...)   ignores any errors
