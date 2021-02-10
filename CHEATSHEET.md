@@ -27,7 +27,7 @@ are syntax that add quotation marks around `key`, so you call them without the q
 
     ($ key [transformer])
         Look up `key` in the `%makevars` hash table and return the result.
-        If transformer is provided, apply it to each
+        If a string-to-string transformer procedure is provided, apply it to each
         space-separated token in the result.
     ($$ key)
         Returns a procedure that looks up `key` in the `%makevars` hash table.
