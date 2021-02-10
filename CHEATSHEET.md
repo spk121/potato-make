@@ -104,6 +104,8 @@ a target file, based on the filename extensions.
      - anything whose string representation as created by
        (format #f "~A" ...) make sense
      
+     Any procedures are applied lazily, when the rule is executed.
+     
      (~ "string" (lambda () "string") ($ KEY) $@ 100 )
      
      Three versions of `~` with special effects
