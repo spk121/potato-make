@@ -70,7 +70,7 @@ command-line arguments.  The command-line arguments are the following,
              -n, --no-execute
                  print rules, but only execute rules marked as
                  'always execute'
-             -B, --boring
+             -a, --ascii
                  use ASCII-only output and no colors
              
              [var=value...]
@@ -411,11 +411,6 @@ The library provides the following procedures for makevars
 > but, with the functions above.  If you do use it directly, the VALUE
 > is a cons where the CAR is string or promise and the CDR is private
 > data.
-
-    %environment-overrides?
-    
-> This boolean variable, when `#t` prevents `lazy-assign` and `assign`
-> from overwriting a *makevar* set by the environment.
         
 ## The build algorithm
 
@@ -437,8 +432,8 @@ In a depth-first search, build each node unless the node target is
 older than the parent.
 
 If a build recipe fails...
-If '-i', mark current node as 'skip', then keep going.
-If '-k', mark all siblings as 'skip', and mark the direct ancestors 'skip', keep
+If '--ignore-errors', mark current node as 'skip', then keep going.
+If '--continue-on-error', mark all siblings as 'skip', and mark the direct ancestors 'skip', keep
 going.
 Else, quit.
 
@@ -448,8 +443,9 @@ the command line).
 
 ## Built-in rules and makevars
 
-Unless the `-r` option was given, there are some builtin suffix rules
-and *makevars* that are present by default. These are
+If the `--builtins` option is given, there are some builtin suffix rules
+and *makevars* that are present by default. These include the following.
+You can add more builtins by updating the potato/builtins.scm file.
 
     MAKE=make
     AR=ar
