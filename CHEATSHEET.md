@@ -24,6 +24,7 @@ are syntax that add quotation marks around `key`, so you call them without the q
 `key`. The returned value of `$` is a string, or an empty string on failure.
 
     ($ KEY) -> "VAL"
+    (Q KEY) -> "\"VAL\""
 
     ($ key [transformer])
         Look up `key` in the `%makevars` hash table and return the result
