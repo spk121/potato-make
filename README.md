@@ -1,4 +1,4 @@
-# studious-potato
+# POTATO MAKE
 
 A build tool written in Guile Scheme.
 
@@ -40,7 +40,7 @@ is named `makefile.scm`; however, you may choose any name.
     exec guile -s "$0" "$@"
     !#
 
-    (use-modules (studious-potato))
+    (use-modules (potato make))
     (setup (command-line))
 
 
