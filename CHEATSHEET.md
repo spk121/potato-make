@@ -36,9 +36,9 @@ are syntax that add quotation marks around `key`, so you call them without the q
         Assign `val` to `key` in the `%makevars` hash table. If `val` is a procedure,
         evaluate it and assign its output to `key` immediately.
 
-## RULES
+## Rules
 
-The target rule is for when the target, and the prerequisites, if any,
+The *target rule* is for when the target, and the prerequisites, if any,
 have filenames or phony names.
 
     (: target-name '(prereq-name-1 prereq-name-2 ...)
@@ -80,13 +80,13 @@ have filenames or phony names.
      (: "foo.c" '("foo.c")
        (~ ($ CC) ($ CFLAGS) "-c" $<))
        
-The suffix rule is a generic rule to convert one file type to another.
-Note that the prerequisites is *not* a list.
+The *suffix rule* is a generic rule to convert one source file to
+a target file, based on the filename extensions.
 
      (-> ".c" ".o"
-       (~ ($ CC) ($ CFLAGS) ".c" $<))
+       (~ ($ CC) ($ CFLAGS) "-c" $< "-o" $@))
        
-# RECIPE HELPERS
+## Recipe Helpers
 
      Concatenate elements with `~`. `~` inserts spaces between the elements.
      Elements can be
@@ -103,7 +103,9 @@ Note that the prerequisites is *not* a list.
      (~- ...)   ignores any errors
      (~@ ...)   doesn't print recipe to console
      (~+ ...)   runs even when `--no-execute` was chosen
-     
+
+## Special Variables
+
      Recipes can contain the following special variables
      
      $@    the target
