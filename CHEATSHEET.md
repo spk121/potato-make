@@ -8,7 +8,7 @@ Add this at the top of your build script.
     exec guile -s "$0" "$@"
     !#
 
-    (use-modules (studious-potato))
+    (use-modules (potato make))
     (initialize)
 
 Add this at the bottom of your build script
