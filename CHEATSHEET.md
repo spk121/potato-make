@@ -26,9 +26,15 @@ are syntax that add quotation marks around `key`, so you call them without the q
     ($ KEY) -> "VAL"
 
     ($ key [transformer])
-        Look up `key` in the `%makevars` hash table and return the result.
+        Look up `key` in the `%makevars` hash table and return the result
+        as a string.  If `key` is not found, return an empty string.
         If a string-to-string transformer procedure is provided, apply it to each
         space-separated token in the result.
+    (Q key [transformer])
+        Like `$` above, except the returned value string has double quotation marks around
+        each space-separated token.  If transformer is supplied, the quotation
+        marks are added after the transformer is applied to each space-separated
+        token.
     (?= key val)
         Assign `val` to `key` in the `%makevars` hash table. If `val` is a procedure,
         assign its output to `key` the first time that `key` is referenced.
