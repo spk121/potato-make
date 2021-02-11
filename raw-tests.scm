@@ -2,7 +2,7 @@
 exec guile -L . -s "$0" "$@"
 !#
 
-(use-modules (studious-potato)
+(use-modules (potato make)
              (srfi srfi-1))
 
 

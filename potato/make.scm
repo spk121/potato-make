@@ -1,4 +1,4 @@
-(define-module (studious-potato)
+(define-module (potato make)
   #:use-module (srfi srfi-1)
   #:use-module (ice-9 exceptions)
   #:use-module (ice-9 optargs)
@@ -112,7 +112,7 @@
 
 (define (display-version-and-exit argv0)
   (format #t "~a~%" argv0)
-  (format #t "  using studious-potato ~a~%" %version)
+  (format #t "  using potato make~a~%" %version)
   (exit 0))
 
 (define (parse-macros lst)
