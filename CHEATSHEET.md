@@ -13,7 +13,7 @@ Add this at the top of your build script.
 
 Add this at the bottom of your build script
 
-    (build)
+    (execute)
     
 The rules go in between `initialize` and `build`
 

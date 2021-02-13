@@ -5,6 +5,7 @@
             bad-proc-output
             invalid-macro
             not-a-regular-file
+            not-a-procedure
             no-read-access-to-file
             ))
 
@@ -57,6 +58,16 @@
 
 (define (not-a-regular-file origin irritant)
   (raise-exception (make-not-a-regular-file origin irritant)))
+
+(define (make-not-a-procedure origin irritants)
+  (make-exception
+   (make-programming-error)
+   (make-exception-with-origin origin)
+   (make-exception-with-message "Not a procedure")
+   (make-exception-with-irritants irritants)))
+
+(define (not-a-procedure origin irritant)
+  (raise-exception (make-not-a-procedure origin irritant)))
 
 (define (make-no-read-access-to-file origin irritants)
   (make-exception

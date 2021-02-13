@@ -9,12 +9,11 @@
   #:use-module (potato rules)
   #:use-module (potato text)
   #:export (initialize
-            execute
-            )
+            execute)
   #:re-export (%suffix-rules
                lazy-assign    ?=
                assign         :=
-               reference      $
+               reference      $    Q
                reference-func $$
                target-rule    :
                suffix-rule    ->
@@ -23,10 +22,15 @@
                newer-prerequisites  $?
                prerequisites        $^
                primary-prerequisite $<
-               compose              ~               
+               string-compose       ~
+               silent-compose       ~@
+               always-execute-compose ~+
+               ignore-error-compose ~-
+               install-alternate-system-driver
                               ))
 
 (define %version "1.0")
+(define %debug-argv0 #f)
 
 ;; #:re-export (
 ;;              lazy-assign ?=
@@ -58,7 +62,7 @@
 ;; If the -t option was specified, make shall write to standard
 ;; output a message for each file that was touched.
 
-(define %opt-quiet #f)
+(define %opt-terse #f)
 (define %opt-verbose #f)
 (define %opt-ignore-errors #f)
 (define %opt-continue-on-error #f)
@@ -68,7 +72,7 @@
 (define (critical spec . args)
   (apply format (append (list #t spec) args)))
 (define (print spec . args)
-  (unless %opt-quiet
+  (unless %opt-terse
     (apply format (append (list #t spec) args))))
 (define (debug spec . args)
   (when %opt-verbose
@@ -77,7 +81,7 @@
 (define option-spec
   '((help              (single-char #\h) (value #f))
     (version           (single-char #\v) (value #f))
-    (quiet             (single-char #\q) (value #f))
+    (terse             (single-char #\q) (value #f))
     (verbose           (single-char #\V) (value #f))
     (environment       (single-char #\e) (value #f))
     (elevate-environment (single-char #\E) (value #f))
@@ -86,14 +90,15 @@
     (continue-on-error (single-char #\k) (value #f))
     (no-execution      (single-char #\n) (value #f))
     (ascii             (single-char #\A) (value #f))
+    (strict            (single-char #\S) (value #f))
     ))
 
 (define (display-help-and-exit argv0)
   (format #t "~A [-hvqVeEbn] [KEY=VALUE ...] [targets ...]~%" argv0)
   (format #t "    -h, --help                     print help and exit~%")
   (format #t "    -v, --version               print version and exit~%")
-  (format #t "    -q, --quiet                   print minimal output~%")
-  (format #t "    -V, --verbose                 print maximum output~%")
+  (format #t "    -q, --terse                       use terse output~%")
+  (format #t "    -V, --verbose                   use verbose output~%")
   (format #t "    -e, --environment        use environment variables~%")
   (format #t "    -E, --elevate-environment~%")
   (format #t "                     use environment variables and let~%")
@@ -101,13 +106,15 @@
   (format #t "    -b, --builtins~%")
   (format #t "        include some common variables and suffix rules~%")
   (format #t "    --ignore-errors~%")
-  (format #t "                   keep building even if commands fail~%")
+  (format #t "                                     ignore all errors~%")
   (format #t "    -k, --continue-on-error~%")
-  (format #t "                   keep building even if commands fail~%")
+  (format #t "           after an error, keep building other targets~%")
   (format #t "    -n, --no-execution~%")
   (format #t "         only execute rules marked as 'always execute'~%")
   (format #t "    -a, --ascii~%")
   (format #t "                       ASCII only output and no colors~%")
+  (format #t "    -S, --strict~%")
+  (format #t "                causes some behaviours to throw errors~%")
   (exit 0))
 
 (define (display-version-and-exit argv0)
@@ -120,7 +127,7 @@
 of pairs of KEY VAL"
   (filter-map
    (lambda (str)
-     (let ((tok (string-split str #\x)))
+     (let ((tok (string-split str #\=)))
        (cond
         ((= 1 (length tok))
          #f)
@@ -141,15 +148,20 @@ return them in a list."
    lst))
 
 (define* (initialize #:optional
-                     (arguments '()))
+                     (arguments #f))
   "Set up the options, rules, and makevars. If ARGUMENTS
 is not set, it will use options, makevars, and targets as
 specified by the command line.  If it is set, it is
 expected to be a list of strings that are command-line
 arguments."
 
+  ;; If left unset, assume user want all the command line arguments.
+  (when (not arguments)
+    (set! arguments (command-line)))
+  ;; If the user has set it to '(), expecting a null environment, add
+  ;; back in a filename, which is required.
   (when (null? arguments)
-    (set! arguments (program-arguments)))
+    (set! arguments (list (car (program-arguments)))))
 
   ;; We start of with the --help and --version command-line arguments.
   (let ((options (getopt-long arguments option-spec))
@@ -159,7 +171,8 @@ arguments."
         (%opt-no-errors #f)
         (%opt-continue-on-error #f)
         (%opt-no-execution #f)
-        (%opt-ascii #f))
+        (%opt-ascii #f)
+        (%opt-strict #f))
     (when (option-ref options 'help #f)
       (display-help-and-exit (car arguments)))
     (when (option-ref options 'version #f)
@@ -176,12 +189,12 @@ arguments."
       (let ((mf (getenv "MAKEFLAGS")))
         (when mf
           (let ((tokens (string-tokenize mf)))
-            (when (member "quiet" tokens)
-              (set! %opt-quiet #t)
+            (when (member "terse" tokens)
+              (set! %opt-terse #t)
               (set! %opt-verbose #f))
             (when (member "verbose" tokens)
               (set! %opt-verbose #t)
-              (set! %opt-quiet #f))
+              (set! %opt-terse #f))
             (when (member "builtins" tokens)
               (set! %opt-builtins #t))
             (when (member "ascii" tokens)
@@ -190,28 +203,32 @@ arguments."
               (set! %opt-ignore-errors #t))
             (when (member "continue-on-error" tokens)
               (set! %opt-continue-on-error #t))
+            (when (member "strict" tokens)
+              (set! %opt-strict #t))
             (when (member "no-execution" tokens)
               (set! %opt-no-execution #t))))))
 
     ;; Now the bulk of the command-line options.
-    (when (option-ref options 'quiet #f)
-      (set! %opt-quiet #t)
+    (when (option-ref options 'terse #f)
+      (set! %opt-terse #t)
       (set! %opt-verbose #f))
     (when (option-ref options 'verbose #f)
       (set! %opt-verbose #t)
-      (set! %opt-quiet #f))
-    (set! %opt-builtins
-      (option-ref options 'builtins #f))
-    (set! %opt-elevate-environment
-      (option-ref options 'elevate-environment #f))
-    (set! %opt-ignore-errors
-      (option-ref options 'ignore-errors #f))
-    (set! %opt-continue-on-error
-      (option-ref options 'continue-on-error #f))
-    (set! %opt-no-execution
-      (option-ref options 'no-execution #f))
-    (set! %opt-ascii
-      (option-ref options 'ascii #f))
+      (set! %opt-terse #f))
+    (when (option-ref options 'builtins #f)
+      (set! %opt-builtins #t))
+    (when (option-ref options 'elevate-environment #f)
+      (set! %opt-elevate-environment #t))
+    (when (option-ref options 'ignore-errors #f)
+      (set! %opt-ignore-errors #t))
+    (when (option-ref options 'continue-on-error #f)
+      (set! %opt-continue-on-error #t))
+    (when (option-ref options 'no-execution #f)
+      (set! %opt-no-execution #t))
+    (when (option-ref options 'ascii #f)
+      (set! %opt-ascii #t))
+    (when (option-ref options 'strict #f)
+      (set! %opt-strict #t))
 
     ;; Now that all the options are set, we can set up
     ;; the build environment.
@@ -221,14 +238,20 @@ arguments."
                            %opt-environment
                            %opt-elevate-environment
                            %opt-builtins
+                           %opt-strict
                            %opt-verbose
                            %opt-ascii)
-      #;(initialize-rules %opt-no-builtins
-                        %opt-verbose)
-      
       ;; The remaining command-line words are the build targets that
       ;; we're going to tackle.
       (set! %targets (parse-targets extra))
+      (initialize-rules %targets
+                        %opt-builtins
+                        %opt-ignore-errors
+                        %opt-continue-on-error
+                        %opt-no-execution
+                        %opt-terse
+                        %opt-verbose
+                        %opt-ascii)
       (set! %initialized #t)
       %targets
       )))
@@ -262,7 +285,7 @@ targets listed on the parsed command-line are used."
       (if (not (build target))
                       ;; %opt-ignore-errors
                       ;; %opt-continue-on-error
-                      ;; %opt-quiet
+                      ;; %opt-terse
                       ;; %opt-verbose))
           (begin
             (print "The recipe for “~A” has failed.~%" target))

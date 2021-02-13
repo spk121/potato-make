@@ -9,7 +9,7 @@
             %elevate-environment?
             lazy-assign    ?=
             assign         :=
-            reference      $
+            reference      $    Q
             reference-func $$
             dump-makevars
             ))
@@ -27,6 +27,7 @@
 (define %ascii? #f)
 (define %makevars #f)
 (define %elevate-environment? #f)
+(define %strict #f)
 (define %verbose? #t)
 (define (debug spec . args)
   (when %verbose?
@@ -55,7 +56,7 @@ later equals signs."
   "The logic of whether which makemacro priority levels can override
 others."
   (if %elevate-environment?
-      (if (and (or (= old-priority) (= old-priority 3) (= old-priority 4))
+      (if (and (or (= old-priority 2) (= old-priority 3) (= old-priority 4))
                (= new-priority 1))
           #f
           ;; else
@@ -185,15 +186,17 @@ the value of MAKEFLAGS or SHELL."
                              environment?
                              elevate-environment?
                              builtins?
+                             strict?
                              verbose?
                              ascii?)
   (set! %elevate-environment? elevate-environment?)
   (set! %makevars (make-hash-table))
+  (set! %strict strict?)
   (set! %verbose? verbose?)
   (set! %ascii? ascii?)
   (when builtins?
     (makevars-add-builtins))
-  (when environment?
+  (when (or environment? elevate-environment?)
     (makevars-add-environment)
     (makevars-add-makeflags))
   (makevars-add-keyvals keyvals)
@@ -211,19 +214,13 @@ the key in the hash table entry.
 later. The promise will be evaluated the first time this key is
 referenced.
     If VAL is not given, the empty string will be used."
-  (when (and (not (string? key))
-             (not (procedure? key)))
-    (bad-key-type "lazy-assign" (list key)))
-  (when (and (not (string? val))
-             (not (procedure? val)))
-    (bad-value-type "lazy-assign" (list val)))
-  (let ((KEY (if (string? key) key (key)))
-        (VAL (if (string? val) val (delay val))))
-    (unless (string? KEY)
-      (bad-proc-output "lazy-assign" key))
-    (makevars-set KEY VAL)
-    (when (and %verbose? (string? VAL))
-      (format #t "~A=~A~%" KEY VAL))))
+  (when (procedure? key)
+    (set! key (key)))
+  (unless (string? key)
+    (set! key (format #f "~a" key)))
+  (makevars-set key (delay val))
+  (when %verbose?
+    (format #t "~A=~A~%" key val)))
 
 (define-syntax ?=
   (lambda (stx)
@@ -240,21 +237,17 @@ VAL.
     If KEY and/or VAL is a thunk, it is immediately evaluated to a
 string to use as the key in the hash table entry.
     If VAL is not given, the empty string will be used."
-  (when (and (not (string? key))
-             (not (procedure? key)))
-    (bad-key-type "assign" (list key)))
-  (when (and (not (string? val))
-             (not (procedure? val)))
-    (bad-value-type "assign" (list val)))
-  (let ((KEY (if (string? key) key (key)))
-        (VAL (if (string? val) val (val))))
-    (unless (string? KEY)
-      (bad-proc-output "assign" KEY))
-    (unless (string? VAL)
-      (bad-proc-output "assign" VAL))
-    (makevars-set KEY VAL)
-    (when %verbose?
-      (format #t "~A=~A~%" KEY VAL))))
+  (when (procedure? key)
+    (set! key (key)))
+  (unless (string? key)
+    (set! key (format #f "~a" key)))
+  (when (procedure? val)
+    (set! val (val)))
+  (unless (string? val)
+    (set! val (format #f "~a" val)))
+  (makevars-set key val)
+  (when %verbose?
+    (format #t "~A=~A~%" key val)))
 
 (define-syntax :=
   (lambda (stx)
@@ -264,8 +257,7 @@ string to use as the key in the hash table entry.
       ((_ key)
        #'(assign (symbol->string (syntax->datum #'key)))))))
 
-
-(define* (reference key #:optional (transformer #f))
+(define* (reference key quoted? #:optional (transformer #f))
   "Looks up KEY in the %makevars hash table. KEY may be a string
 or a procedure that evaluates to a string.
      If the value of the key
@@ -284,33 +276,62 @@ space-separated token in the looked-up value."
     (set! key (key))
     (unless (string? key)
       (bad-proc-output "reference" key)))
+  (when (not (string? key))
+    (set! key (format #t "~a" key)))
   (let* ((val&priority (hash-ref %makevars key))
          (val (if (pair? val&priority) (car val&priority) #f))
          (priority (if (pair? val&priority) (cdr val&priority) #f)))
     (if (not val)
-        #f
+        (if %strict
+            (error (format #t "There is no makevar for key ~a~%" key))
+            ;; else
+            (if quoted?
+                "\"\""
+                ""))
         ;; else
         (begin
-          (when (promise? val)
+          (cond
+           ((promise? val)
             (set! val (force val))
-            (unless (string? val)
-              (bad-proc-output "reference" val))
-            (hash-set! %makevars key (cons val priority))
-            (when %verbose?
-              (format #t "~A=~A~%" key val)))
+            (cond
+             ((string? val)
+              ;; noop
+              #t)
+             ((procedure? val)
+              (set! val (val)))
+             (else
+              (set! val (format #f "~a" val)))))
+           ((string? val)
+            ;; noop
+            #f)
+           (else
+            (set! val (format #f "~a" val))))
+          (hash-set! %makevars key (cons val priority))
+          (when %verbose?
+            (format #t "~A=~A~%" key val))
           (when (procedure? transformer)
             (set! val (string-append-with-spaces
                        (map transformer
                             (string-tokenize val)))))
-          val))))
+          (if quoted?
+              (string-append "\"" val "\"")
+              val)))))
 
 (define-syntax $
   (lambda (stx)
     (syntax-case stx ()
-      ((_ key val)
-       #'(reference (symbol->string (syntax->datum #'key)) transformer))
+      ((_ key transformer)
+       #'(reference (symbol->string (syntax->datum #'key)) #f transformer))
       ((_ key)
-       #'(reference (symbol->string (syntax->datum #'key)))))))
+       #'(reference (symbol->string (syntax->datum #'key)) #f)))))
+
+(define-syntax Q
+  (lambda (stx)
+    (syntax-case stx ()
+      ((_ key transformer)
+       #'(reference (symbol->string (syntax->datum #'key)) #t transformer))
+      ((_ key)
+       #'(reference (symbol->string (syntax->datum #'key)) #t)))))
 
 (define (reference-func key)
   "Looks up KEY in the %makevars hash table. KEY shall be a string
@@ -347,3 +368,4 @@ that string."
     (syntax-case stx ()
       ((_ key)
        #'(reference-func (symbol->string (syntax->datum #'key)))))))
+

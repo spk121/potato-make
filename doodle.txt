@@ -2,3 +2,9 @@
 U+220E END OF PROOF
 U+227A PRECEDES
 U+227B SUCCEEDS
+
+a.out
+→ foo.o [PASS]
+-> bar.o [PASS]
+
+a.out ≺

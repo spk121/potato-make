@@ -41,8 +41,7 @@ is named `makefile.scm`; however, you may choose any name.
     !#
 
     (use-modules (potato make))
-    (setup (command-line))
-
+    (initialize)
 
 This boilerplate loads the library functions and it parses the
 command-line arguments.  The command-line arguments are the following,
@@ -72,6 +71,8 @@ command-line arguments.  The command-line arguments are the following,
                  'always execute'
              -a, --ascii
                  use ASCII-only output and no colors
+             -W, --warn
+                 enable warning messages
              
              [var=value...]
                set the value of makevars
@@ -84,6 +85,20 @@ variables and built-in rules.  With this library, these require
 command-line arguments to be enabled to pick up environment variables
 and built-in rules.  This is to make this tool more appropriate for
 generating *reproducible builds*.
+
+If you don't want `initialize` to parse the command line, you may call
+it with specific command line arguments, like the example below.  The
+first string is the name of the script, and then any combination of
+flags, macro assignments and targets may follow.
+
+    (initialize '("makefile.scm" "--verbose" "CC=gcc" "all"))
+
+If you call initialize with an empty list as below, it will guess the
+script name from the command-line arguements, but, will ignore all
+other flags and options.
+
+    ;; ignore all command line arguments except the script name
+    (initialize '())
 
 ## Environment Variables
 
@@ -375,8 +390,12 @@ The library provides the following procedures for makevars
     reference key [transformer]
 
 > `reference` looks up KEY in the `%makevar` hash table.  If it is
-> found, VALUE is returned as a string.  If it is not found, `#f` is
-> returned.
+> found, VALUE is returned as a string.
+
+> *IMPORTANT!* If it is not found, an empty string is returned.  This
+> is because it is a common practice in makefiles to use makevars that
+> may or may not be defined by environment variables. In `--verbose`
+> mode, a warning will be printed when a key cannot be found.
         
 > If the value was stored using `lazy-assign` and is a *promise*, this
 > procedure is *forced* to return a string.  Also, the value in the
