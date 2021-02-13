@@ -35,8 +35,7 @@
 (define %ignore-errors? #f)
 (define %continue-on-error? #f)
 (define %no-execution? #f)
-(define %terse? #f)
-(define %verbose? #f)
+(define %verbosity 2)
 (define %ascii? #f)
 (define %top-level-targets '())
 
@@ -67,7 +66,6 @@ it is evaluated."
               (effective-arg #f))
           (cond
            ((procedure? arg)
-            (format #t "BLAMMO ~s ~s ~%" arg (arg))
             (set! effective-arg (arg))
             
             (unless (string? effective-arg)
@@ -154,7 +152,7 @@ it is evaluated."
 (define* (target-rule name #:optional (prerequisites '()) #:rest recipes)
   "Register a new target rule"
 
-  (when %verbose?
+  (when (>= %verbosity 3)
     (format #t "Defining target rule: ~A ~A ~A~%" prerequisites (right-arrow) name))
   ;; If any recipes are raw strings, we need to make them into
   ;; (cons 'default string)
@@ -208,7 +206,7 @@ it is evaluated."
   "Register a suffix rule"
   
   ;; FIXME: Typecheck
-  (when %verbose?
+  (when (>= %verbosity 3)
     (format #t "Defining suffix rule: ~A ~A ~A~%" source (right-arrow) target))
   ;; If any recipes are raw strings, we need to make them into
   ;; (cons 'default string)
@@ -600,15 +598,14 @@ failure condition happens, mark the node as having failed."
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; LET'S GO! 
 
-(define (initialize-rules targets builtins? ignore-errors? continue-on-error? no-execution? terse? verbose? ascii?)
+(define (initialize-rules targets builtins? ignore-errors? continue-on-error? no-execution? verbosity ascii?)
   (set! %target-rules '())
   (set! %suffix-rules '())
   (set! %top-level-targets targets)
   (set! %ignore-errors? ignore-errors?)
   (set! %continue-on-error? continue-on-error?)
   (set! %no-execution? no-execution?)
-  (set! %terse? terse?)
-  (set! %verbose? verbose?)
+  (set! %verbosity verbosity)
   (set! %ascii? ascii?)
   (when builtins?
     (add-builtins)))

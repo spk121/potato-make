@@ -62,7 +62,8 @@
 ;; If the -t option was specified, make shall write to standard
 ;; output a message for each file that was touched.
 
-(define %opt-terse #f)
+;; Verbosity is 0 = silent, 1 = terse, 2 = default, 3 = verbose
+(define %verbosity 2)
 (define %opt-verbose #f)
 (define %opt-ignore-errors #f)
 (define %opt-continue-on-error #f)
@@ -72,17 +73,16 @@
 (define (critical spec . args)
   (apply format (append (list #t spec) args)))
 (define (print spec . args)
-  (unless %opt-terse
+  (when (>= %verbosity 2)
     (apply format (append (list #t spec) args))))
 (define (debug spec . args)
-  (when %opt-verbose
+  (when (>= %verbosity 3)
     (apply format (append (list #t spec) args))))
 
 (define option-spec
   '((help              (single-char #\h) (value #f))
     (version           (single-char #\v) (value #f))
-    (terse             (single-char #\q) (value #f))
-    (verbose           (single-char #\V) (value #f))
+    (verbosity         (single-char #\V) (value #t))
     (environment       (single-char #\e) (value #f))
     (elevate-environment (single-char #\E) (value #f))
     (builtins          (single-char #\b) (value #f))
@@ -97,8 +97,8 @@
   (format #t "~A [-hvqVeEbn] [KEY=VALUE ...] [targets ...]~%" argv0)
   (format #t "    -h, --help                     print help and exit~%")
   (format #t "    -v, --version               print version and exit~%")
-  (format #t "    -q, --terse                       use terse output~%")
-  (format #t "    -V, --verbose                   use verbose output~%")
+  (format #t "    -V 0..3, --verbosity=0..3~%")
+  (format #t "           set output level from 0=silent to 3=verbose~%")                    
   (format #t "    -e, --environment        use environment variables~%")
   (format #t "    -E, --elevate-environment~%")
   (format #t "                     use environment variables and let~%")
@@ -190,11 +190,9 @@ arguments."
         (when mf
           (let ((tokens (string-tokenize mf)))
             (when (member "terse" tokens)
-              (set! %opt-terse #t)
-              (set! %opt-verbose #f))
+              (set! %verbosity 1))
             (when (member "verbose" tokens)
-              (set! %opt-verbose #t)
-              (set! %opt-terse #f))
+              (set! %verbosity 3))
             (when (member "builtins" tokens)
               (set! %opt-builtins #t))
             (when (member "ascii" tokens)
@@ -209,12 +207,10 @@ arguments."
               (set! %opt-no-execution #t))))))
 
     ;; Now the bulk of the command-line options.
-    (when (option-ref options 'terse #f)
-      (set! %opt-terse #t)
-      (set! %opt-verbose #f))
-    (when (option-ref options 'verbose #f)
-      (set! %opt-verbose #t)
-      (set! %opt-terse #f))
+    (when (option-ref options 'verbosity #f)
+      (let ((verbosity (string->number (option-ref options 'verbosity #f))))
+        (when verbosity
+          (set! %verbosity verbosity))))
     (when (option-ref options 'builtins #f)
       (set! %opt-builtins #t))
     (when (option-ref options 'elevate-environment #f)
@@ -239,7 +235,7 @@ arguments."
                            %opt-elevate-environment
                            %opt-builtins
                            %opt-strict
-                           %opt-verbose
+                           %verbosity
                            %opt-ascii)
       ;; The remaining command-line words are the build targets that
       ;; we're going to tackle.
@@ -249,8 +245,7 @@ arguments."
                         %opt-ignore-errors
                         %opt-continue-on-error
                         %opt-no-execution
-                        %opt-terse
-                        %opt-verbose
+                        %verbosity
                         %opt-ascii)
       (set! %initialized #t)
       %targets
@@ -283,10 +278,6 @@ targets listed on the parsed command-line are used."
                (rest (cdr targets)))
       (print "Attempting to run target “~A”.~%" target)
       (if (not (build target))
-                      ;; %opt-ignore-errors
-                      ;; %opt-continue-on-error
-                      ;; %opt-terse
-                      ;; %opt-verbose))
           (begin
             (print "The recipe for “~A” has failed.~%" target))
           ;; else

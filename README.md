@@ -51,10 +51,8 @@ command-line arguments.  The command-line arguments are the following,
                  displays help
              -v, --version
                  displays the version number of this script
-             -q, --quiet
-                 use a terse output format
-             -V, --verbose
-                 use a verbose output format
+             -V [0,1,2,3], --verbosity=[0,1,2,3]
+                 choose the verbosity of the output
              -e, --environment
                  environment variables are converted to makevars
              -E, --elevate-environment
@@ -91,7 +89,7 @@ it with specific command line arguments, like the example below.  The
 first string is the name of the script, and then any combination of
 flags, macro assignments and targets may follow.
 
-    (initialize '("makefile.scm" "--verbose" "CC=gcc" "all"))
+    (initialize '("makefile.scm" "--verbosity=3" "CC=gcc" "all"))
 
 If you call initialize with an empty list as below, it will guess the
 script name from the command-line arguements, but, will ignore all
@@ -200,7 +198,7 @@ recipe, it causes the recipe not to end execution, even if an error is
 signaled.
 
 `silent-compose` (aka `~@`) is like string-compose, but, it does not
-print the resulting string to the output port, except in verbose mode.
+print the resulting string to the output port, except with verbose output.
 
 `always-execute-compose` (aka `~+`) is like compose, but, it forces
 the line to always be executed, even if the `--no-execution` option
@@ -394,8 +392,8 @@ The library provides the following procedures for makevars
 
 > *IMPORTANT!* If it is not found, an empty string is returned.  This
 > is because it is a common practice in makefiles to use makevars that
-> may or may not be defined by environment variables. In `--verbose`
-> mode, a warning will be printed when a key cannot be found.
+> may or may not be defined by environment variables. With verbose output,
+> a warning will be printed when a key cannot be found.
         
 > If the value was stored using `lazy-assign` and is a *promise*, this
 > procedure is *forced* to return a string.  Also, the value in the

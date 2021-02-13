@@ -187,12 +187,12 @@ the value of MAKEFLAGS or SHELL."
                              elevate-environment?
                              builtins?
                              strict?
-                             verbose?
+                             verbosity
                              ascii?)
   (set! %elevate-environment? elevate-environment?)
   (set! %makevars (make-hash-table))
   (set! %strict strict?)
-  (set! %verbose? verbose?)
+  (set! %verbose? (= verbosity 3))
   (set! %ascii? ascii?)
   (when builtins?
     (makevars-add-builtins))
