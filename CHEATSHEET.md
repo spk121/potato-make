@@ -24,18 +24,12 @@ are syntax that add quotation marks around `key`, so you call them without the q
 `key`. The returned value of `$` is a string, or an empty string on failure.
 
     ($ KEY) -> "VAL"
-    (Q KEY) -> "\"VAL\""
 
     ($ key [transformer])
         Look up `key` in the `%makevars` hash table and return the result
         as a string.  If `key` is not found, return an empty string.
         If a string-to-string transformer procedure is provided, apply it to each
         space-separated token in the result.
-    (Q key [transformer])
-        Like `$` above, except the returned value string has double quotation marks around
-        each space-separated token.  If transformer is supplied, the quotation
-        marks are added after the transformer is applied to each space-separated
-        token.
     (?= key val)
         Assign `val` to `key` in the `%makevars` hash table. If `val` is a procedure,
         assign its output to `key` the first time that `key` is referenced.
@@ -100,7 +94,7 @@ a target file, based on the filename extensions.
      - strings
      - procedures that return strings
      - `%makevar` hash-table references
-     - special variables
+     - automatic variables
      - anything whose string representation as created by
        (format #f "~A" ...) make sense
      
@@ -113,9 +107,9 @@ a target file, based on the filename extensions.
      (~@ ...)   doesn't print recipe to console
      (~+ ...)   runs even when `--no-execute` was chosen
 
-## Special Variables
+## Automatic Variables
 
-     Recipes can contain the following special variables
+     Recipes can contain the following automatic variables
      
      $@    the target
      $*    the target w/o a filename suffix
@@ -126,9 +120,3 @@ a target file, based on the filename extensions.
            as a single space-separated string
      $$?   the prerequisites that are files newer than the target file
            as a scheme list of strings
-           
-     There are quoted variants to all the above, where each target
-     or prerequisite string is placed within double quotation marks, as might
-     be required for filenames or paths that contain spaces.
-     
-     Q@ Q* Q< Q^ QQ^ Q? QQ?
