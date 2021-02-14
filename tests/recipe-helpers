@@ -1,0 +1,97 @@
+#!/usr/bin/env sh
+exec guile -L . -s "$0" "$@"
+!#
+
+(use-modules (potato make)
+             (srfi srfi-1)
+             (srfi srfi-64))
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; RECIPE HELPERS
+
+(test-begin "recipe_helpers")
+
+(test-assert "initialize"
+  (initialize))
+
+(test-assert "String-compose returns 'default and procedure."
+  (let ((ret (~ "hello")))
+    (and
+     (eq? (car ret) 'default)
+     (procedure? (cdr ret)))))
+
+(test-assert "Silent-compose returns 'silent and procedure."
+  (let ((ret (~@ "hello")))
+    (and
+     (eq? (car ret) 'silent)
+     (procedure? (cdr ret)))))
+
+(test-assert "Always-execute-compose returns 'always-execute and procedure."
+  (let ((ret (~+ "hello")))
+    (and
+     (eq? (car ret) 'always-execute)
+     (procedure? (cdr ret)))))
+
+(test-assert "Ignore-error-compose returns 'ignore-error and procedure."
+  (let ((ret (~- "hello")))
+    (and
+     (eq? (car ret) 'ignore-error)
+     (procedure? (cdr ret)))))
+
+(test-equal "String-compose passes through strings."
+  "hello"
+  (let ((ret (~ "hello")))
+    ((cdr ret))))
+
+(test-equal "String-compose concatenates strings with an added space."
+  "hello world"
+  (let ((ret (~ "hello" "world")))
+    ((cdr ret))))
+
+(test-equal "String-compose doesn't add a space after a null string."
+  "world"
+  (let ((ret (~ "" "world")))
+    ((cdr ret))))
+
+(test-equal "String-compose doesn't add a space before a null string."
+  "hello"
+  (let ((ret (~ "hello" "")))
+    ((cdr ret))))
+
+(test-equal "String-compose adds a space in lieu of a null medial string."
+  "hello world"
+  (let ((ret (~ "hello" "" "world")))
+    ((cdr ret))))
+
+(test-equal "String-compose handles procedure elements."
+  "hello world"
+  (let ((ret (~ "hello" (lambda () "world"))))
+    ((cdr ret))))
+
+(test-equal "String-compose handles integer elements."
+  "hello 123"
+  (let ((ret (~ "hello" 123)))
+    ((cdr ret))))
+
+(test-equal "String-compose handles character elements."
+  "hello w"
+  (let ((ret (~ "hello" #\w)))
+    ((cdr ret))))
+
+(test-equal "String-compose handles makevar elements."
+  "hello BAR"
+  (begin
+    (:= FOO "BAR")
+    (let ((ret (~ "hello" ($ FOO))))
+      ((cdr ret)))))
+
+(test-equal "An empty string-compose returns a null string."
+  ""
+  (let ((ret (~)))
+    ((cdr ret))))
+
+(test-end "recipe_helpers")
+
+;; Local Variables:
+;; mode: scheme
+;; End:

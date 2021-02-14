@@ -26,16 +26,21 @@ are syntax that add quotation marks around `key`, so you call them without the q
     ($ KEY) -> "VAL"
 
     ($ key [transformer])
-        Look up `key` in the `%makevars` hash table and return the result
-        as a string.  If `key` is not found, return an empty string.
-        If a string-to-string transformer procedure is provided, apply it to each
-        space-separated token in the result.
+        Look up `key` in the `%makevars` hash table and return the
+        result as a string.  If `key` is not found, return an empty
+        string.  If a string-to-string transformer procedure is
+        provided, apply it to each space-separated token in the
+        result.
+
     (?= key val)
-        Assign `val` to `key` in the `%makevars` hash table. If `val` is a procedure,
-        assign its output to `key` the first time that `key` is referenced.
+        Assign `val` to `key` in the `%makevars` hash table. If `val`
+        is a procedure, assign its output to `key` the first time that
+        `key` is referenced.
+
     (:= key val)
-        Assign `val` to `key` in the `%makevars` hash table. If `val` is a procedure,
-        evaluate it and assign its output to `key` immediately.
+        Assign `val` to `key` in the `%makevars` hash table. If `val`
+        is a procedure, evaluate it and assign its output to `key`
+        immediately.
 
 ## Rules
 
@@ -47,8 +52,8 @@ have filenames or phony names.
        recipe-2
        ...)
 
-     `target-name` is a string which is either a filename to be created
-     or an phony name like "all" or "clean".
+     `target-name` is a string which is either a filename to be
+     created or an phony name like "all" or "clean".
 
      Recipe as a string to be evaluated by the system
 
@@ -85,11 +90,24 @@ have filenames or phony names.
      Recipe as a boolean to indicate pass or failure without doing any
      processing.  For example, the rule below tells Potato Make that
      the file "foo.c" exists without actually testing for it.
-
+     
      (: "foo.c" '() #t)
 
-The *suffix rule* is a generic rule to convert one source file to
-a target file, based on the filename extensions.
+     If there is no recipe at all, it is shorthand for the recipe #t,
+     indicating a recipe that always passes. This is used
+     in prerequisite-only target rules, such as below, which passes
+     so long as the prerequisites
+     pass. These two rules are the same.
+
+     (: "all" '("foo.exe"))
+     (: "all" '("foo.exe") #t)
+     
+     Lastly, if the recipe is #f, this target will always fail.
+     
+     (: "fail" '() #f)
+
+The *suffix rule* is a generic rule to convert one source file to a
+target file, based on the filename extensions.
 
      (-> ".c" ".o"
        (~ ($ CC) ($ CFLAGS) "-c" $< "-o" $@))

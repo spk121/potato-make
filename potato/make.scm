@@ -4,6 +4,7 @@
   #:use-module (ice-9 optargs)
   #:use-module (ice-9 getopt-long)
   #:use-module (ice-9 receive)
+  #:use-module (system vm trace)
   #:use-module (potato exceptions)
   #:use-module (potato makevars)
   #:use-module (potato rules)
@@ -278,8 +279,6 @@ targets listed on the parsed command-line are used."
   (when (not (null? targets))
     (let loop ((target (car targets))
                (rest (cdr targets)))
-      (when (>= %verbosity 3)
-        (format #t "Considering target file ~A~A~A.~%" (lquo) target (rquo)))
       (if (not (build target))
           (begin
             (print "The recipe for “~A” has failed.~%" target)

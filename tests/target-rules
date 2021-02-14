@@ -1,0 +1,109 @@
+#!/usr/bin/env sh
+exec guile -L . -s "$0" "$@"
+!#
+
+(use-modules (potato make)
+             (srfi srfi-1)
+             (srfi srfi-64))
+
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; TARGET RULES
+
+(test-begin "target_rules")
+
+;; These stubs override the driver that calls
+;; 'system' so we can instead just investigate
+;; what string it was passed.
+(define %cmd #f)
+(define (stub-system-pass cmd)
+  (format #t "stub-system-pass receive command ~S~%" cmd)
+  (set! %cmd cmd)
+  0)
+(define (stub-system-fail cmd)
+  (set! %cmd cmd)
+  1)
+
+
+(test-assert "Install alternate system driver."
+  (false-if-exception (install-alternate-system-driver stub-system-pass)))
+
+(test-equal "A string target rule is sent to system driver."
+  "cc -o foo.exe foo.c"
+  (begin
+    (initialize)
+    (: "foo.exe" '("foo.c")
+       "cc -o foo.exe foo.c")
+    (: "foo.c" '() #t)
+    (execute)
+    %cmd))
+
+(test-assert "target rule is a procedure"
+  (begin
+    (let ((tmpvar #f))
+      (initialize '("test" "foo.exe"))
+      (: "foo.exe" '("foo.c")
+         (lambda ()
+           (set! tmpvar #t)))
+      (: "foo.c" '() #t)
+      (execute)
+      tmpvar)))
+
+(test-equal "target rule is a procedure returning a string"
+  "cc -o foo.exe foo.c"
+  (begin
+    (initialize '("test" "foo.exe"))
+    (: "foo.exe" '("foo.c")
+       (lambda ()
+         ("cc -o foo.exe foo.c")))
+    (execute)
+    %cmd))
+
+(test-equal "target rule using string-compose on a string"
+  "cc -o foo.exe foo.c"
+  (begin
+    (initialize '("test" "foo.exe"))
+    (: "foo.exe" '("foo.c")
+       (~ "cc -o foo.exe foo.c"))
+    (execute)
+    %cmd))
+
+(test-equal "target rule using string-compose on special variables"
+  "cc -o foo.exe foo.c"
+  (begin
+    (initialize '("test" "foo.exe"))
+    (: "foo.exe" '("foo.c")
+       (~ "cc -o" $@ $<))
+    (execute)
+    %cmd))
+
+(test-equal "target rule check success"
+  #t
+  (begin
+    (initialize '("test" "foo.exe"))
+    (: "foo.exe" '("foo.c")
+       (~ "cc -o" $@ $<))
+    (: "foo.c" '() #t)
+    (execute)))
+
+(test-assert "install failing alternate system driver"
+  (false-if-exception (install-alternate-system-driver stub-system-fail)))
+
+(test-equal "target rule check failure of system call"
+  #f
+  (begin
+    (initialize '("test" "foo.exe"))
+    (: "foo.exe" '("foo.c")
+       (~ "cc -o" $@ $<))
+    (execute)))
+
+(test-equal "target rule check failure of scheme procedure"
+  #f
+  (begin
+    (initialize '("test" "foo.exe"))
+    (: "foo.exe" '("foo.c")
+       (lambda ()
+         #f))
+    (execute)))
+
+(test-end "target_rules")

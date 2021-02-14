@@ -1,5 +1,6 @@
 (define-module (potato rules)
   #:use-module (ice-9 pretty-print)
+  #:use-module (ice-9 optargs)
   #:use-module (srfi srfi-1)
   #:use-module (srfi srfi-9)
   #:use-module (potato exceptions)
@@ -14,8 +15,8 @@
            initialize-rules
            first-target-rule-name
            install-alternate-system-driver
-           target-rule :
-           suffix-rule ->
+           target-rule         :
+           suffix-rule         ->
            target-name         $@
            newer-prerequisites $? $$?
            primary-prerequisite $<
@@ -42,8 +43,12 @@
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; HELPER FUNCTIONS
 
+
 (define (basename str)
   "Strip off the '.ext' part of a filename string."
+  (unless (string? str)
+    (scm-error 'wrong-type-arg "basename" "Not a string: ~S" (list str) #f))
+
   (let ((idx (string-index-right str #\.)))
     (if idx
         (substring str 0 idx)
@@ -67,10 +72,10 @@ it is evaluated."
           (cond
            ((procedure? arg)
             (set! effective-arg (arg))
-            
+
             (unless (string? effective-arg)
-              (bad-proc-output "~" arg))
-            )
+              (bad-proc-output "~" arg)))
+
            ((string? arg)
             (set! effective-arg arg))
            (else
@@ -111,10 +116,16 @@ it is evaluated."
 (define ~+ always-execute-compose)
 
 (define (regular-file? filename)
+  (unless (string? filename)
+    (scm-error 'wrong-type-arg "regular-file?" "Not a string: ~S" (list filename) #f))
+
   (let ((st (stat filename #f)))
     (eq? (stat:type st) 'regular)))
 
 (define (compute-mtime filename)
+  (unless (string? filename)
+    (scm-error 'wrong-type-arg "regular-file?" "Not a string: ~S" (list filename) #f))
+
   (let ((st (stat filename #f)))
     (+ (* 1000000000 (stat:mtime st))
        (stat:mtimensec st))))
@@ -122,11 +133,13 @@ it is evaluated."
 (define %system-proc system)
 
 (define (install-alternate-system-driver proc)
-  "Give a procure to use rather than the standard
-'system' procedure."
+  "Give a procure to use rather than the standard 'system' procedure,
+installs it as the system driver.  Returns the old system driver."
   (unless (procedure? proc)
-    (not-a-procedure "install-alternate-system-driver" proc))
-  (set! %system-proc proc))
+    (scm-error 'wrong-type-arg "install-alternate-system-driver" "Not a procedure: ~S" (list proc) #f))
+  (let ((old-proc %system-proc))
+    (set! %system-proc proc)
+    old-proc))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; TARGET STRUCT AND METHODS
@@ -142,7 +155,7 @@ it is evaluated."
   ;; A list of strings or procedures
   (recipes       target-rule-get-recipes
                  target-rule-set-recipes!)
-  ;; 1 = script-defined. 2 = built-in 
+  ;; 1 = script-defined. 2 = built-in
   (priority      target-rule-get-priority
                  target-rule-set-priority!))
 
@@ -152,8 +165,17 @@ it is evaluated."
 (define* (target-rule name #:optional (prerequisites '()) #:rest recipes)
   "Register a new target rule"
 
-  (when (>= %verbosity 3)
-    (format #t "Defining target rule: ~A ~A ~A~%" prerequisites (right-arrow) name))
+  (format #t "BLAMMO!! ~S~%" recipes)
+
+  (when (>= %verbosity 0)
+    (if (null? prerequisites)
+        (format #t "Defining target rule: ~a~A~a~%" (lquo) name (rquo))
+        (format #t "Defining target rule: ~a~A~a ~A ~A~%" (lquo) name (rquo) (left-arrow) prerequisites)))
+
+  ;; Empty recipes is shorthand for a recipe that always passes.
+  (when (null? recipes)
+    (set! recipes (list #t)))
+
   ;; If any recipes are raw strings, we need to make them into
   ;; (cons 'default string)
   (let ((recipes2
@@ -161,10 +183,8 @@ it is evaluated."
                 (cond
                  ((pair? recipe)
                   recipe)
-                 ((string? recipe)
-                  (cons 'default recipe))
-                 (else
-                  (error "bad recipe for target rule"))))
+                     (else
+                      (cons 'default recipe))))
               recipes)))
 
     (let ((rule (make-target-rule name prerequisites recipes2 1)))
@@ -178,7 +198,7 @@ it is evaluated."
   (if (null? %target-rules)
       #f
       ;; else
-      (target-rule-get-name (car %target-rules))))
+      (target-rule-get-name (last %target-rules))))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; SUFFIX STRUCT AND METHODS
@@ -195,7 +215,7 @@ it is evaluated."
   ;; A list of strings or procedures
   (recipes       suffix-rule-get-recipes
                  suffix-rule-set-recipes!)
-  ;; 1 = script-defined. 2 = built-in 
+  ;; 1 = script-defined. 2 = built-in
   (priority      suffix-rule-get-priority
                  suffix-rule-set-priority!))
 
@@ -204,9 +224,9 @@ it is evaluated."
 
 (define (suffix-rule source target . recipes)
   "Register a suffix rule"
-  
+
   ;; FIXME: Typecheck
-  (when (>= %verbosity 3)
+  (when (>= %verbosity 0)
     (format #t "Defining suffix rule: ~A ~A ~A~%" source (right-arrow) target))
   ;; If any recipes are raw strings, we need to make them into
   ;; (cons 'default string)
@@ -218,7 +238,7 @@ it is evaluated."
                  (else
                   (cons 'default recipe))))
               recipes)))
-  
+
     (let ((rule (make-suffix-rule source target recipes2 1)))
       (set! %suffix-rules (cons rule %suffix-rules)))))
 
@@ -242,16 +262,19 @@ it is evaluated."
   (mtime     node-get-mtime node-set-mtime!)
   ;; One of 'pass, 'fail, or 'undetermined
   (status    node-get-status node-set-status!)
+  ;; Either 'target or 'suffix or 'default
+  (rule-type     node-get-rule-type node-set-rule-type!)
   ;; A list of rules
   (rules     node-get-rules node-set-rules!)
   (children  node-get-children node-set-children!)
-  ;; Determines how many children must pass for the parent
-  ;; to be evaluated.  Either 'or or 'and.
-  (logic     node-get-logic node-set-logic!)
   )
 
-(define (has-rules? node)
-  (not (null? (node-get-rules node))))
+(define (using-target-rule? node)
+  (eq? 'target (node-get-rule-type node)))
+(define (using-suffix-rules? node)
+  (eq? 'suffix (node-get-rule-type node)))
+(define (using-default-rule? node)
+  (eq? 'default (node-get-rule-type node)))
 
 (define (set-fail! node)
   (node-set-status! node 'fail))
@@ -272,37 +295,53 @@ it is evaluated."
   (eq? (node-get-status node) 'undetermined))
 
 (define (any-child-has-passed? node)
+  (unless (node? node)
+    (scm-error 'wrong-type-arg "any-child-has-passed?" "Not a node: ~S" (list node) #f))
+  (when (null? (node-get-children node))
+    (scm-error 'misc-error "any-child-has-passed?" "Node ~a has no children"
+               (list (node-get-name node)) #t))
+
   (let ((children (node-get-children node)))
-    (if (null? children)
-        #f
-        (any passed? children))))
+    (any passed? children)))
 
 (define (every-child-has-passed? node)
+  (unless (node? node)
+    (scm-error 'wrong-type-arg "every-child-has-passed?" "Not a node: ~S" (list node) #f))
+  (when (null? (node-get-children node))
+    (scm-error 'misc-error "every-child-has-passed?" "Node ~a has no children"
+               (list (node-get-name node)) #t))
+
   (let ((children (node-get-children node)))
-    (if (null? children)
-        #f
-        (every passed? children))))
+    (every passed? children)))
 
 (define (any-child-has-failed? node)
+  (unless (node? node)
+    (scm-error 'wrong-type-arg "any-child-has-failed?" "Not a node: ~S" (list node) #f))
+  (when (null? (node-get-children node))
+    (scm-error 'misc-error "any-child-has-failed?" "Node ~a has no children"
+               (list (node-get-name node)) #t))
+
   (let ((children (node-get-children node)))
-    (if (null? children)
-        #f
-        (any failed? children))))
+    (any failed? children)))
 
 (define (every-child-has-failed? node)
+  (unless (node? node)
+    (scm-error 'wrong-type-arg "every-child-has-failed?" "Not a node: ~S" (list node) #f))
+  (when (null? (node-get-children node))
+    (scm-error 'misc-error "every-child-has-failed?" "Node ~a has no children"
+               (list (node-get-name node)) #t))
+
   (let ((children (node-get-children node)))
-    (if (null? children)
-        #f
-        (every failed? children))))
+    (every failed? children)))
 
 (define (children-complete? node)
   (cond
    ((leaf-node? node)
     #t)
-   ((eqv? 'and (node-get-logic node))
+   ((eqv? 'target (node-get-rule-type node))
     (or (every-child-has-passed? node)
         (any-child-has-failed? node)))
-   ((eqv? 'or (node-get-logic node))
+   ((eqv? 'suffix (node-get-rule-type node))
     (or (every-child-has-failed? node)
         (any-child-has-passed? node)))
    (else
@@ -312,9 +351,9 @@ it is evaluated."
   (cond
    ((null? (node-get-children node))
     #t)
-   ((eqv? 'and (node-get-logic node))
+   ((eq? 'target (node-get-rule-type node))
     (every-child-has-passed? node))
-   ((eqv? 'or (node-get-logic node))
+   ((eq? 'suffix (node-get-rule-type node))
     (any-child-has-passed? node))
    (else
     #f)))
@@ -322,14 +361,15 @@ it is evaluated."
 (define (get-next-child node)
   "Return the first child node that is not yet PASS or FAIL"
   (let ((children (node-get-children node)))
-    (if (null? children)
-        #f
-    
-        (any (lambda (child)
-               (if (eqv? (node-get-status child) 'undetermined)
-                   child
-                   #f))
-             children))))
+    (cond
+     ((null? children)
+      #f)
+     (else
+       (any (lambda (child)
+              (if (eqv? (node-get-status child) 'undetermined)
+                  child
+                  #f))
+            children)))))
 
 (define (has-parent? node)
   (if (node-get-parent node)
@@ -357,6 +397,14 @@ it is evaluated."
                      children-mtime)
               #t
               #f)))))
+
+(define (node-depth-string node)
+  (let loop ((depth 0)
+             (cur node))
+    (if (has-parent? cur)
+        (loop (1+ depth) (get-parent cur))
+        ;;
+        (make-string (* 2 depth) #\space))))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; AUTOMATIC VARIABLES
@@ -440,7 +488,7 @@ it is evaluated."
   (-> ".c" ""
       (~ ($ CC) ($ CFLAGS) ($ LDFLAGS) "-o" $@ $<))
   (-> ".f" ""
-      (~ ($ FC) ($ FFLAGS) ($ LDFLAGS) "-o" $@ %<))
+      (~ ($ FC) ($ FFLAGS) ($ LDFLAGS) "-o" $@ $<))
   (-> ".sh" ""
       (~ "cp" $< $@)
       (~ "chmod a+x" $< $@))
@@ -464,108 +512,156 @@ it is evaluated."
   (-> ".scm" ".go"
       (~ ($ GUILD) "compile" ($ GFLAGS) $<)))
 
-(define (run-rules! node)
-  "Runs the rules associated with this node.  If this node has *and*
-logic, it runs the recipes one by one, quitting on the first failure.
-If this rule has *or* logic, it runs them quitting on the first
-success."
+(define (run-target-rule! node)
+  "Runs the (singular) target rule associated with this node."
+  (unless (node? node)
+    (scm-error 'wrong-type-arg "run-target-rule!" "Not a node: ~S" (list node) #f))
+
   (let ((rules (node-get-rules node)))
     (when (null? rules)
-      (error "no rules"))
+      (scm-error 'misc-error "run-target-rule!" "Node ~S has no target rules"
+                 (list (node-get-name node)) #f))
+    (unless (= 1 (length rules))
+      (scm-error 'misc-error "run-target-rule!" "Node ~S has ~A target rules"
+                 (list (node-get-name node) (length rules)) #f))
+    (unless (or (leaf-node? node) (every-child-has-passed? node))
+      (scm-error 'misc-error "run-target-rule!" "Node ~S: not all children have passed"
+                 (list (node-get-name node)) #f))
 
-    (let ((logic (node-get-logic node)))
-      (let loop ((rule (car rules))
-                 (rest (cdr rules)))
-        (cond
-         ((target-rule? rule)
-          (target-rule-prep-automatic-variables node rule)
-          (run-recipes! node (target-rule-get-recipes rule)))
-         ((suffix-rule? rule)
-        (suffix-rule-prep-automatic-variables node rule)
-        (run-recipes! node (suffix-rule-get-recipes rule)))
-         (else
-          (error "bad rule")))
-        
-        (let ((status (node-get-status node)))
-          (cond
-           ((or (and (eq? 'and logic)
-                     (eq? 'fail status))
-                (and (eq? 'or logic)
-                     (eq? 'pass status))
-                (null? rest))
-            ;; We're done
-            status)
-           (else
-            (loop (car rest) (cdr rest)))))))))
+    (let ((rule (car rules)))
+      (target-rule-prep-automatic-variables node rule)
+      (run-recipes! node (target-rule-get-recipes rule))
+      (let ((status (node-get-status node)))
+        status))))
+
+(define (run-suffix-rules! node)
+  "Runs the one-or-more suffix rules associated with this node.  It
+runs them one-by-one, quitting on the first success."
+  (unless (node? node)
+    (scm-error 'wrong-type'arg "run-suffix-rules!" "Not a node: ~S" (list node) #f))
+
+  (let ((rules (node-get-rules node))
+        (children (node-get-children node)))
+    (when (null? rules)
+      (scm-error 'misc-error "run-suffix-rules!" "Node ~S has no rules"
+                 (list (node-get-name node)) #f))
+    (when (null? children)
+      (scm-error 'misc-error "run-suffix-rule!" "Node ~S has no children"
+                 (list (node-get-name node)) #f))
+    (unless (any-child-has-passed? node)
+      (scm-error 'misc-error "run-suffix-rule!" "Node ~S: not child has passed"
+                 (list (node-get-name node)) #f))
+    (unless (= (length rules) (length children))
+      (scm-error 'misc-error "run-suffix-rule!" "Node ~S: must have as many children as rules"
+                 (list (node-get-name node)) #f))
+
+    (let ((i 0)
+          (len (length children)))
+      (while (< i len)
+        (let ((rule (list-ref rules i))
+              (child (list-ref children i)))
+          (when (passed? child)
+            (when (>= %verbosity 3)
+              (format #t "~A: attempting to make using ~a~A~a ~a ~a~A~a rule"
+                      (node-get-name node)
+                      (lquo) (suffix-rule-get-source rule) (rquo)
+                      (right-arrow)
+                      (lquo) (suffix-rule-get-target rule) (rquo)))
+            (suffix-rule-prep-automatic-variables node rule)
+            (run-recipes! node (suffix-rule-get-recipes rule)))
+
+          (when (passed? node)
+            (break))
+          (set! i (1+ i)))))
+
+    (when (>= %verbosity 3)
+      (if (passed? node)
+          (format #t "PASS: ~a~%" (node-get-name node))
+          (format #t "FAIL: ~a~%" (node-get-name node))))
+    (node-get-status node)))
 
 (define (run-recipes! node recipes)
   "Runs the recipes on this node, one by one.  Recipes are either
 strings, procedures that return strings, or generic procedures.  If a
 failure condition happens, mark the node as having failed."
-  (when (null? recipes)
-    (error "no recipe"))
-  (let loop ((opt/recipe (car recipes))
-             (rest (cdr recipes)))
-    (let ((opt (car opt/recipe))
-          (recipe (cdr opt/recipe)))
-      ;; Recipes are either
-      ;; - strings to pass to system
-      ;; - procedures that return a string which is passed
-      ;;   to system
-      ;; - procedures (that don't return a string) that are executed
-      ;;   that pass unless they return #f
-      ;; OPT is one of 'default, 'ignore, 'silent
-      (cond
-       ((string? recipe)
-        (format #t "[SYSTEM] ~A~%" recipe)
-        (let ((retval (%system-proc recipe)))
-          (format #t " --> ~S~%" retval)
-          (unless (zero? retval)
-            (set-fail! node))))
-       
-       ((procedure? recipe)
-        (if (procedure-name recipe)
-            (format #t "[PROC] ~A~%" (procedure-name recipe))
-            (format #t "[PROC] ~%"))
-        (let ((retval (recipe)))
-          (format #t " --> ~S~%" retval)
-          
-          (cond
-           ((eqv? retval #f)
-            (set-fail! node))
-           
-           ;; If a procedure returns a string, that string gets
-           ;; processed by system.
-           ((string=? retval)
-            (format #t "[SYSTEM] ~A~%" retval)
-            (let ((retval2 (%system-proc retval)))
-              (format #t " --> ~S~%" retval2)
-              (unless (zero? retval2)
-                (set-fail! node)))))))
-       
-       (else
-        ;; Not a string or procedure
-        (error "bad rule")))
-      
-      
-      (cond
-       ((failed? node)
-        ;; quit
-        )
-       ((null? rest)
-        (set-pass! node))
-       (else
-        ((loop (car rest)
-               (cdr rest)))))))
-  
-  (when (passed? node)
-    (let ((name (node-get-name node)))
-      (when (and (file-exists? name)
-                 (regular-file? name))
-        (node-set-mtime! node (compute-mtime name))))))
+  (unless (node? node)
+    (scm-error 'wrong-type-arg "run-recipes!" "Not a node: ~S" (list node) #f))
+  ;;(unless (and (list? recipes) (not (null? recipes)))
+  ;;  (scm-error 'wrong-type-arg "run-recipes!" "Not a non-null list: ~S" (list recipes) #f))
 
-(define (run-default-recipe! node)
-  "The default recipe passes if the file exists"
+  (let ((i 0)
+        (len (length recipes)))
+    (while (< i len)
+      (let* ((opt/recipe (list-ref recipes i))
+             (opt (car opt/recipe))
+             (recipe (cdr opt/recipe)))
+        ;; Recipes are either
+        ;; - strings to pass to system
+        ;; - procedures that return a string which is passed
+        ;;   to system
+        ;; - procedures (that don't return a string) that are executed
+        ;;   that pass unless they return #f
+        ;; OPT is one of 'default, 'ignore, 'silent
+
+        (cond
+         ((eq? recipe #t)
+          (set-pass! node))
+
+         ((eq? recipe #f)
+          (set-fail! node))
+
+         ((string? recipe)
+          (when (= %verbosity 1)
+            (format #t "~a~%" (node-get-name node)))
+          (when (or (and (= %verbosity 2) (not (eq? 'silent opt)))
+                    (= %verbosity 3))
+            (format #t "~A~%" recipe))
+          (let ((retval (%system-proc recipe)))
+            (if (zero? retval)
+                (set-pass! node)
+                (set-fail! node))))
+
+         ((procedure? recipe)
+          (let ((retval (recipe)))
+            (cond
+             ;; If a procedure returns a string, that string gets
+             ;; processed by system.
+             ((string? retval)
+              (when (= %verbosity 1)
+                (format #t "~a~%" (node-get-name node)))
+              (when (or (and (= %verbosity 2) (not (eq? 'silent opt)))
+                        (= %verbosity 3))
+                (format #t "~A~%" retval))
+              (let ((retval2 (%system-proc retval)))
+                (if (zero? retval2)
+                    (set-pass! node)
+                    (set-fail! node))))
+
+             ;; A scheme procedure recipe that returns false.
+             ((eqv? retval #f)
+              (set-fail! node))
+
+             (else
+              ;; Otherwise, this was a procedure that didn't return
+              ;; #f or a string, so it gets a pass.
+              (set-pass! node)))))
+
+         (else
+          ;; Can't be converted to a viable string or procedure
+          (scm-error 'misc-error "run-recipes!" "bad recipe: ~S" (list recipe) #f)))
+
+        (when (failed? node) (break))
+        (set! i (1+ i))))
+
+    (when (passed? node)
+      (let ((name (node-get-name node)))
+        (when (and (file-exists? name)
+                   (regular-file? name))
+          (node-set-mtime! node (compute-mtime name)))))))
+
+(define (run-default-rule! node)
+  "The default rule if not other rule exists. It just passes if the
+file exists."
   (let ((name (node-get-name node)))
     (if (and (file-exists? name)
              (regular-file? name))
@@ -627,7 +723,8 @@ failure condition happens, mark the node as having failed."
   "Constructs a tree of nodes, with name as the root node."
   (let ((node (make-node name parent 'undetermined)))
     (node-set-children! node '())
-    ;; FIXME: here check that this name differs from all ancenstor's
+    (node-set-rule-type! node 'default)
+    ;; FIXME: here check that this name differs from all ancestor's
     ;; names
 
     ;; Try to the file's modification time.
@@ -649,7 +746,7 @@ failure condition happens, mark the node as having failed."
             (begin
               ;; OK we have a matching rule
               (node-set-rules! node (list rule))
-              (node-set-logic! node 'and)
+              (node-set-rule-type! node 'target)
               ;; For target-rules, the prerequisites comes from the
               ;; rule itself.
 
@@ -669,13 +766,12 @@ failure condition happens, mark the node as having failed."
       (for-each
        (lambda (rule)
          (let ((targ (suffix-rule-get-target rule)))
-           (format #t "possible suffix rule ~S~%" rule)
            (when (string-suffix? targ name)
              ;; For suffix rules, there will be exactly one child per
              ;; rule and the name of the child is constructed from a
              ;; suffix and the parent's name.
              (node-set-rules! node (cons rule (node-get-rules node)))
-             (node-set-logic! node 'or)
+             (node-set-rule-type! node 'suffix)
              (let* ((src (suffix-rule-get-source rule))
                     (prereq
                      (string-append
@@ -698,39 +794,116 @@ failure condition happens, mark the node as having failed."
     node))
 
 (define (build root)
-  "Give a tree of <node>, this executes the recipes therein."
-  (format #t "BLAMMO 1 ~S~%" root)
+  "Give a tree of <node>, this executes the recipes therein.
+This is where the magic happens."
   (let ((tree (create-node root #f)))
     (let ((node tree))
+      (format #t "~ABegin building target ~a~A~a.~%"
+              (node-depth-string node) (lquo) (node-get-name node) (rquo))
       (while #t
-        (when (>= %verbosity 2) (format #t "PRocessing ~S~%" (node-get-name node)))
+        (format #t "~AConsidering target ~a~A~a.~%"
+                (node-depth-string node) (lquo) (node-get-name node) (rquo))
         (if (undetermined? node)
             (begin
-              (when (>= %verbosity 3) (format #t "~S is undetermined~%" (node-get-name node)))
+              (format #t "~ATarget file ~a~A~a is undetermined.~%"
+                      (node-depth-string node) (lquo) (node-get-name node) (rquo))
+              (unless (node-get-mtime node)
+                (format #t "~AFile ~a~A~a does not exist.~%"
+                        (node-depth-string node) (lquo) (node-get-name node) (rquo)))
               (if (children-complete? node)
-                  (if (children-passed? node)
-                      (if (up-to-date? node)
-                          (set-pass! node)
-                          ;; else, not up to date
-                          (if (has-rules? node)
-                              (run-rules! node)
-                              ;; else, no recipe exists
-                              (run-default-recipe! node)))
-                      ;; else, children have failed
-                      (set-fail! node))
+                  (begin
+                    (format #t "~AFinished prerequisites of target file ~a~A~a.~%"
+                            (node-depth-string node) (lquo) (node-get-name node) (rquo))
+                    (if (children-passed? node)
+                        (begin
+                          (format #t "~AThe prerequisites of target file ~a~A~a have passed.~%"
+                                  (node-depth-string node) (lquo) (node-get-name node) (rquo))
+                          (if (up-to-date? node)
+                            (begin
+                              (when (node-get-mtime node)
+                                (format #t "~ATarget file ~a~A~a is up to date.~%"
+                                        (node-depth-string node)
+                                        (lquo) (node-get-name node) (rquo)))
+                              (set-pass! node))
+                            ;; else, not up to date
+                            (begin
+                              (format #t "~ATarget file ~a~A~a is not up to date.~%"
+                                      (node-depth-string node)
+                                      (lquo) (node-get-name node) (rquo))
+                              (cond
+                               ((using-target-rule? node)
+                                (format #t "~ATarget file ~a~A~a has a target rule.~%"
+                                        (node-depth-string node)
+                                        (lquo) (node-get-name node) (rquo))
+                                (run-target-rule! node))
+                               ((using-suffix-rules? node)
+                                (format #t "~ATarget file ~a~A~a has a suffix rule.~%"
+                                        (node-depth-string node)
+                                        (lquo) (node-get-name node) (rquo))
+                                (run-suffix-rules! node))
+                               ((using-default-rule? node)
+                                (format #t "~ATarget file ~a~A~a is using the default rule.~%"
+                                        (node-depth-string node)
+                                        (lquo) (node-get-name node) (rquo))
+                                (run-default-rule! node))
+                               (else
+                                (error "bad rules")))
+
+                              (if (passed? node)
+                                  (format #t "~A[PASS] target file ~a~A~a.~%"
+                                          (node-depth-string node)
+                                          (lquo) (node-get-name node) (rquo))
+                                  (format #t "~A[FAIL] target file ~a~A~a.~%"
+                                          (node-depth-string node)
+                                          (lquo) (node-get-name node) (rquo))))))
+                        ;; else, children have failed
+                        (begin
+                          (format #t "~AThe prerequisites of target file ~a~A~a have failed.~%"
+                                  (node-depth-string node) (lquo) (node-get-name node) (rquo))
+                          (set-fail! node))))
                   ;; else, children aren't complete
-                  (set! node (get-next-child node))))
+                  (begin
+                    (format #t "~AThe prerequisites of target file ~a~A~a are incomplete.~%"
+                            (node-depth-string node) (lquo) (node-get-name node) (rquo))
+                    (let ((next (get-next-child node)))
+                      (format #t "~ANew node ~a~A~a ~a ~a~A~a.~%"
+                              (node-depth-string node)
+                              (lquo) (node-get-name node) (rquo)
+                              (right-arrow)
+                              (lquo) (node-get-name next) (rquo))
+                      (set! node (get-next-child node))
+                      (format #t "~ATarget is now ~a~A~a.~%~!"
+                              (node-depth-string node)
+                              (lquo) (node-get-name node) (rquo)))
+                    )))
             ;; else, this node is determined
             (begin
-              (when (>= %verbosity 2) (format #t "~S is determined ~S~%" (node-get-name node) (node-get-status node)))
-              #| (if (and (not %ignore-errors?) (failed? node))
-                  (break)|#
-                  ;; else not failed
-                  (if (has-parent? node)
-                      (set! node (get-parent node))
-                      ;; else, there is no parent to this node
-                      (break))
-                  ;; )
-            ))))
+              (if (passed? node)
+                  (format #t "~ATarget file ~a~A~a is passed.~%"
+                          (node-depth-string node) (lquo) (node-get-name node) (rquo))
+                  (format #t "~ATarget file ~a~A~a has failed.~%"
+                          (node-depth-string node) (lquo) (node-get-name node) (rquo)))
+              (if (has-parent? node)
+                  (begin
+                    (format #t "~ANew node ~a~A~a ~a ~a~A~a.~%"
+                            (node-depth-string node)
+                            (lquo) (node-get-name node) (rquo)
+                            (right-arrow)
+                            (lquo) (node-get-name (node-get-parent node)) (rquo))
+
+                    (set! node (get-parent node)))
+                  ;; else, there is no parent to this node
+                  (begin
+                    (format #t "~ATarget file ~a~A~a has no parent.~%"
+                            (node-depth-string node)
+                            (lquo) (node-get-name node) (rquo))
+                    (if (passed? node)
+                        (format #t "~A[COMPLETE] [PASS] target file ~a~A~a.~%"
+                                (node-depth-string node)
+                                (lquo) (node-get-name node) (rquo))
+                        (format #t "~A[COMPLETE] [FAIL] target file ~a~A~a.~%"
+                                (node-depth-string node)
+                                (lquo) (node-get-name node) (rquo)))
+                    (break)))))))
     ;; Return the command output of the root node
     (passed? tree)))

@@ -1,0 +1,135 @@
+#!/usr/bin/env sh
+exec guile -L . -s "$0" "$@"
+!#
+(use-modules (potato make)
+             (srfi srfi-1)
+             (srfi srfi-64))
+
+(test-begin "makevars")
+
+(test-equal "Makevars can be set in the environment with the --environment flag."
+  "BAR1"
+  (begin
+    (setenv "FOO1" "BAR1")
+    (initialize '("test" "--environment"))
+    (let ((result ($ FOO1)))
+      (unsetenv "FOO1")
+      result)))
+
+(test-equal "Makevars can be set in the MAKEFLAGS environment variable with the --environment flag."
+  "BAR2"
+  (begin
+    (setenv "MAKEFLAGS" "FOO2=BAR2")
+    (initialize '("test" "--environment"))
+    (let ((result ($ FOO2)))
+      (unsetenv "MAKEFLAGS")
+      result)))
+
+(test-equal "Makevars can be set with initialize."
+  "BAR3"
+  (begin
+    (initialize '("test" "FOO3=BAR3"))
+    ($ FOO3)))
+
+(test-equal "Makevars can be set in the script."
+  "BAR4"
+  (begin
+    (:= FOO4 "BAR4")
+    ($ FOO4)))
+
+(test-equal "Makevars can be set lazily in the script."
+  "BAR5"
+  (begin
+    (?= FOO5 "BAR5")
+    ($ FOO5)))
+
+(test-assert "A lazy makevar of a procedure is a promise before it is referenced."
+  (begin
+    (?= FOO6 (lambda () "BAR6"))
+    (let ((val (hash-ref (@@ (potato makevars) %makevars) "FOO6")))
+      (promise? (car val)))))
+
+(test-equal "A lazy makevar of a procedure is a string after it is referenced."
+  "BAR7"
+  (begin
+    (?= FOO7 (lambda () "BAR7"))
+    ($ FOO7)
+    (let ((val (hash-ref (@@ (potato makevars) %makevars) "FOO7")))
+      (car val))))
+
+(test-equal "Referencing an unset makevar returns an empty string."
+  ""
+  ($ FOO8))
+
+(test-error "Referencing an unset makevar throws an error in strict mode."
+  #t
+  (begin
+    (initialize '("test" "--strict"))
+    ($ FOO9)))
+
+(test-equal "Assigning an integer to a makevar converts it into a string."
+  "100"
+  (begin
+    (:= FOO10 100)
+    ($ FOO10)))
+
+(test-equal "Assigning a character to a makevar converts it into a string."
+  "x"
+  (begin
+    (:= FOO11 #\x)
+    ($ FOO11)))
+
+(test-equal "Makevar script assignment overrides command-line assignment."
+  "BAZ14"
+  (begin
+    (initialize '("test" "FOO14=BAR14"))
+    (:= FOO14 "BAZ14")
+    ($ FOO14)))
+
+(test-equal "Makevar script assignment overrides MAKEFLAGS assignment."
+  "BAZ15"
+  (begin
+    (setenv "MAKEFLAGS" "FOO15=BAR15")
+    (initialize '("test" "--environment"))
+    (:= FOO15 "BAZ15")
+    ($ FOO15)))
+
+(test-equal "Makevar script assignment overrides environment assignment."
+  "BAZ16"
+  (begin
+    (setenv "FOO16" "BAR16")
+    (initialize '("test" "--environment"))
+    (unsetenv "FOO16")
+    (:= FOO16 "BAZ16")
+    ($ FOO16)))
+
+(test-equal "Makevar command-line assignment overrides script assignment in elevate mode."
+  "BAR14"
+  (begin
+    (initialize '("test" "FOO14=BAR14" "--elevate-environment"))
+    (:= FOO14 "BAZ14")
+    ($ FOO14)))
+
+(test-equal "MAKEFLAGS assignment overrides script assignment in elevate mode."
+  "BAR15"
+  (begin
+    (setenv "MAKEFLAGS" "FOO15=BAR15")
+    (initialize '("test" "--elevate-environment"))
+    (unsetenv "MAKEFLAGS")
+    (:= FOO15 "BAZ15")
+    ($ FOO15)))
+
+(test-equal "Environment assignment overrides script assignment in elevate mode."
+  "BAR16"
+  (begin
+    (setenv "FOO16" "BAR16")
+    (initialize '("test" "--elevate-environment"))
+    (:= FOO16 "BAZ16")
+    ($ FOO16)))
+
+(test-end "makevars")
+
+
+;; Local Variables:
+;; mode: scheme
+;; End:

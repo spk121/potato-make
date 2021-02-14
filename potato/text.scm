@@ -58,6 +58,10 @@
   (if %fancy
       "→" "->"))
 
+(define (left-arrow)
+  (if %fancy
+      "←" "<-"))
+
 (define (ellipses)
   (if %fancy "…" "..."))
 

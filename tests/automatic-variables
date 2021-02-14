@@ -1,0 +1,285 @@
+#!/usr/bin/env sh
+exec guile -L . -s "$0" "$@"
+!#
+(use-modules (potato make)
+             (srfi srfi-1)
+             (srfi srfi-64))
+
+(test-begin "automatic-variables")
+
+(test-equal "A phony target rule with no prerequisites defines $@."
+  #t
+  (begin
+    (initialize)
+    (: "clean" '()
+       (lambda ()
+         (string=? ($@) "clean")))
+    (execute)))
+
+(test-equal "A phony target rule with no prerequisites defines $*."
+  #t
+  (begin
+    (initialize)
+    (: "clean" '()
+       (lambda ()
+         (string=? ($*) "clean")))
+    (execute)))
+
+(test-equal "A phony target rule with no prerequisites has empty string $<."
+  #t
+  (begin
+    (initialize)
+    (: "clean" '()
+       (lambda ()
+         (string-null? ($<))))
+    (execute)))
+
+(test-equal "A phony target rule with no prerequisites has null list $$?."
+  #t
+  (begin
+    (initialize)
+    (: "clean" '()
+       (lambda ()
+         (null? ($$?))))
+    (execute)))
+
+(test-equal "A phony target rule with no prerequisites has empty string $?."
+  #t
+  (begin
+    (initialize)
+    (: "clean" '()
+       (lambda ()
+         (string-null? ($?))))
+    (execute)))
+
+(test-equal "A phony target rule with no prerequisites has null list $$^."
+  #t
+  (begin
+    (initialize)
+    (: "clean" '()
+       (lambda ()
+         (null? ($$^))))
+    (execute)))
+
+(test-equal "A phony target rule with no prerequisites has empty string $^."
+  #t
+  (begin
+    (initialize)
+    (: "clean" '()
+       (lambda ()
+         (string-null? ($^))))
+    (execute)))
+
+;;;;;;;;;;;;;;;;
+
+(test-equal "A target rule with a prerequisite defines $@."
+  #t
+  (begin
+    (initialize)
+    (: "foo.exe" '("foo.x")
+       (lambda ()
+         (string=? ($@) "foo.exe")))
+    (: "foo.x" '() #t)
+    (execute)))
+
+(test-equal "A target rule with a prerequisite defines $*."
+  #t
+  (begin
+    (initialize)
+    (: "foo.exe" '("foo.x")
+       (lambda ()
+         (string=? ($*) "foo")))
+    (: "foo.x" '() #t)
+    (execute)))
+
+(test-equal "A target rule with a prerequisite defines $<."
+  #t
+  (begin
+    (initialize)
+    (: "foo.exe" '("foo.x")
+       (lambda ()
+         (string=? ($<) "foo.x")))
+    (: "foo.x" '() #t)
+    (execute)))
+
+(test-equal "A target rule with a prerequisite defines $$?."
+  #t
+  (begin
+    (initialize)
+    (: "foo.exe" '("foo.x")
+       (lambda ()
+         (equal? ($$?) (list "foo.x"))))
+    (: "foo.x" '() #t)
+    (execute)))
+
+(test-equal "A target rule with a prerequisite defines $?."
+  #t
+  (begin
+    (initialize)
+    (: "foo.exe" '("foo.x")
+       (lambda ()
+         (string=? ($?) "foo.x")))
+    (: "foo.x" '() #t)
+    (execute)))
+
+(test-equal "A target rule with a prerequisite defines $$^."
+  #t
+  (begin
+    (initialize)
+    (: "foo.exe" '("foo.x")
+       (lambda ()
+         (equal? ($$?) (list "foo.x"))))
+    (: "foo.x" '() #t)
+    (execute)))
+
+(test-equal "A target rule with a prerequisite defines $^."
+  #t
+  (begin
+    (initialize)
+    (: "foo.exe" '("foo.x")
+       (lambda ()
+         (string=? ($?) "foo.x")))
+    (: "foo.x" '() #t)
+    (execute)))
+
+;;;;;;;;;;;;;;;;
+
+(test-equal "A target rule with multiple prerequisites defines $@."
+  #t
+  (begin
+    (initialize)
+    (: "foo.exe" '("foo.x" "foo.y")
+       (lambda ()
+         (string=? ($@) "foo.exe")))
+    (: "foo.x" '() #t)
+    (: "foo.y" '() #t)
+    (execute)))
+
+(test-equal "A target rule with multiple prerequisites defines $*."
+  #t
+  (begin
+    (initialize)
+    (: "foo.exe" '("foo.x" "foo.y")
+       (lambda ()
+         (string=? ($*) "foo")))
+    (: "foo.x" '() #t)
+    (: "foo.y" '() #t)
+    (execute)))
+
+(test-equal "A target rule with multiple prerequisites defines $<."
+  #t
+  (begin
+    (initialize)
+    (: "foo.exe" '("foo.x" "foo.y")
+       (lambda ()
+         (string=? ($<) "foo.x")))
+    (: "foo.x" '() #t)
+    (: "foo.y" '() #t)
+    (execute)))
+
+(test-equal "A target rule with multiple prerequisites defines $$?."
+  #t
+  (begin
+    (initialize)
+    (: "foo.exe" '("foo.x" "foo.y")
+       (lambda ()
+         (equal? ($$?) (list "foo.x" "foo.y"))))
+    (: "foo.x" '() #t)
+    (: "foo.y" '() #t)
+    (execute)))
+
+(test-equal "A target rule with multiple prerequisites defines $?."
+  #t
+  (begin
+    (initialize)
+    (: "foo.exe" '("foo.x" "foo.y")
+       (lambda ()
+         (string=? ($?) "foo.x foo.y")))
+    (: "foo.x" '() #t)
+    (: "foo.y" '() #t)
+    (execute)))
+
+(test-equal "A target rule with multiple prerequisites defines $$^."
+  #t
+  (begin
+    (initialize)
+    (: "foo.exe" '("foo.x" "foo.y")
+       (lambda ()
+         (equal? ($$?) (list "foo.x" "foo.y"))))
+    (: "foo.x" '() #t)
+    (: "foo.y" '() #t)
+    (execute)))
+
+(test-equal "A target rule with multiple prerequisites defines $^."
+  #t
+  (begin
+    (initialize)
+    (: "foo.exe" '("foo.x" "foo.y")
+       (lambda ()
+         (string=? ($?) "foo.x foo.y")))
+    (: "foo.x" '() #t)
+    (: "foo.y" '() #t)
+    (execute)))
+
+;;;;;;;;;;;;;;;;
+
+(test-equal "A suffix rule with a prerequisite defines $@."
+  #t
+  (begin
+    (initialize '("test" "foo.y"))
+    (-> ".x" ".y"
+        (lambda ()
+          (format #t "BLAMMO ~A~%" ($@))
+          (string=? ($@) "foo.y")))
+    (: "foo.x" '() #t)
+    (execute)))
+
+(test-equal "A suffix rule with a prerequisite defines $*."
+  #t
+  (begin
+    (initialize '("test" "foo.y"))
+    (-> ".x" ".y"
+        (lambda ()
+          (format #t "BLAMMO ~A~%" ($*))
+          (string=? ($*) "foo")))
+    (: "foo.x" '() #t)
+    (execute)))
+
+(test-equal "A suffix rule with a prerequisite defines $<."
+  #t
+  (begin
+    (initialize '("test" "foo.y"))
+    (-> ".x" ".y"
+        (lambda ()
+          (format #t "BLAMMO ~A~%" ($<))
+          (string=? ($<) "foo.x")))
+    (: "foo.x" '() #t)
+    (execute)))
+
+(test-equal "A suffix rule with a prerequisite defines $$^."
+  #t
+  (begin
+    (initialize '("test" "foo.y"))
+    (-> ".x" ".y"
+        (lambda ()
+          (format #t "BLAMMO ~A~%" ($$^))
+          (equal? ($$^) (list "foo.x"))))
+    (: "foo.x" '() #t)
+    (execute)))
+
+(test-equal "A suffix rule with a prerequisite defines $^."
+  #t
+  (begin
+    (initialize '("test" "foo.y"))
+    (-> ".x" ".y"
+        (lambda ()
+          (format #t "BLAMMO ~A~%" ($^))
+          (equal? ($^) "foo.x")))
+    (: "foo.x" '() #t)
+    (execute)))
+
+(test-end "automatic-variables")
+
+;; Local Variables:
+;; mode: scheme
+;; End:
