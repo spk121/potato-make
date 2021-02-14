@@ -19,8 +19,8 @@
                suffix-rule    ->
                target-name          $@
                target-basename      $*
-               newer-prerequisites  $?
-               prerequisites        $^
+               newer-prerequisites  $? $$?
+               prerequisites        $^ $$^
                primary-prerequisite $<
                string-compose       ~
                silent-compose       ~@
@@ -189,6 +189,8 @@ arguments."
       (let ((mf (getenv "MAKEFLAGS")))
         (when mf
           (let ((tokens (string-tokenize mf)))
+            (when (member "silent" tokens)
+              (set! %verbosity 0))
             (when (member "terse" tokens)
               (set! %verbosity 1))
             (when (member "verbose" tokens)
@@ -263,28 +265,32 @@ targets listed on the parsed command-line are used."
   (when (null? targets)
     (set! targets %targets))
   (when (null? targets)
-    (debug "No target was specified.~%")
+    (debug "No build target was explicitely specified.~%")
     (let ((rule (first-target-rule-name)))
       (if rule
           (begin
-            (debug "Using first rule ~A as target.~%" rule)
-            (set! targets (list rule))
-            ;; else
-            (debug "There are no target rules in the recipe.~%")))))
+            (debug "Using first rule ~a~A~a as the build target.~%" (lquo) rule (rquo))
+            (set! targets (list rule)))
+          ;; else
+          (debug "There are no target rules in the recipe.~%"))))
 
   ;; Build each target in order.
   (when (not (null? targets))
     (let loop ((target (car targets))
                (rest (cdr targets)))
-      (print "Attempting to run target “~A”.~%" target)
+      (when (>= %verbosity 3)
+        (format #t "Considering target file ~A~A~A.~%" (lquo) target (rquo)))
       (if (not (build target))
           (begin
-            (print "The recipe for “~A” has failed.~%" target))
+            (print "The recipe for “~A” has failed.~%" target)
+            #f)
           ;; else
           (begin
             (print "The recipe for “~A” has succeeded.~%" target)
             (if (not (null? rest))
-                (loop (car rest) (cdr rest))))))))
+                (loop (car rest) (cdr rest))
 
+                ;; True if all targets are built successfully.
+                #t))))))
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 

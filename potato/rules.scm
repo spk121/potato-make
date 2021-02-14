@@ -17,10 +17,10 @@
            target-rule :
            suffix-rule ->
            target-name         $@
-           newer-prerequisites $?
+           newer-prerequisites $? $$?
            primary-prerequisite $<
            target-basename     $*
-           prerequisites       $^
+           prerequisites       $^ $$^
            build
            string-compose         ~
            silent-compose         ~@
@@ -215,13 +215,11 @@ it is evaluated."
                 (cond
                  ((pair? recipe)
                   recipe)
-                 ((string? recipe)
-                  (cons 'default recipe))
                  (else
-                  (error "bad recipe for target rule"))))
+                  (cons 'default recipe))))
               recipes)))
   
-    (let ((rule (make-suffix-rule source target recipes 1)))
+    (let ((rule (make-suffix-rule source target recipes2 1)))
       (set! %suffix-rules (cons rule %suffix-rules)))))
 
 ;; Alias
@@ -346,15 +344,19 @@ it is evaluated."
 - it has an mtime
 - all its children have mtimes
 - its mtime is older than the mtime of its children"
-  (let ((children (map node-get-mtime (node-get-children node)))
-        (parent (node-get-mtime node)))
-    (if (every (lambda (child)
-                 (and (integer? parent)
-                      (integer? child)
-                      (>= parent child)))
-               children)
-        #t
-        #f)))
+  (let ((children (node-get-children node))
+        (parent-mtime (node-get-mtime node)))
+    (if (or (null? children) (not (integer? parent-mtime)))
+        ;; Targets without children are always rebuilt.
+        ;; Targets without mtimes are always rebuilt.
+        #f
+        (let ((children-mtime (map node-get-mtime children)))
+          (if (every (lambda (child-mtime)
+                       (and (integer? child-mtime)
+                            (>= parent-mtime child-mtime)))
+                     children-mtime)
+              #t
+              #f)))))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; AUTOMATIC VARIABLES
@@ -365,19 +367,30 @@ it is evaluated."
 (define primary-prerequisite 'unspecified)
 (define newer-prerequisites '())
 
+(define (string-append-with-spaces lst)
+  "Appends the strings in lst, adding spaces in between."
+  (if (null? lst)
+      ""
+      ;; else
+      (fold
+       (lambda (elem prev)
+         (string-append prev " " elem))
+       (car lst)
+       (cdr lst))))
+
 (define $@  (lambda () target-name))
 (define $*  (lambda () target-basename))
 (define $<  (lambda () primary-prerequisite))
 (define $$? (lambda () newer-prerequisites))
-(define $?  (lambda () (apply string-compose newer-prerequisites)))
+(define $?  (lambda () (string-append-with-spaces newer-prerequisites)))
 (define $$^ (lambda () prerequisites))
-(define $^  (lambda () (apply string-compose prerequisites)))
+(define $^  (lambda () (string-append-with-spaces prerequisites)))
 
 (define (target-rule-prep-automatic-variables node rule)
   (set! target-name (node-get-name node))
   (set! target-basename (basename target-name))
   (set! prerequisites (target-rule-get-prerequisites rule))
-  (set! primary-prerequisite (if (null? prerequisites) #f (car prerequisites)))
+  (set! primary-prerequisite (if (null? prerequisites) "" (car prerequisites)))
   (set! newer-prerequisites
     ;; If this node doesn't have a real file attached, then all
     ;; prerequistes are "newer".
@@ -596,7 +609,7 @@ failure condition happens, mark the node as having failed."
 ;; - Ignore errors
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-;; LET'S GO! 
+;; LET'S GO!
 
 (define (initialize-rules targets builtins? ignore-errors? continue-on-error? no-execution? verbosity ascii?)
   (set! %target-rules '())
@@ -616,7 +629,7 @@ failure condition happens, mark the node as having failed."
     (node-set-children! node '())
     ;; FIXME: here check that this name differs from all ancenstor's
     ;; names
-    
+
     ;; Try to the file's modification time.
     (when (file-exists? name)
       (when (not (regular-file? name))
@@ -624,12 +637,12 @@ failure condition happens, mark the node as having failed."
       (when (not (access? name R_OK))
         (no-read-access-to-file "create-node" name))
       (node-set-mtime! node (compute-mtime name)))
-    
+
     ;; Search for matching target rule.
     (when (not (null? %target-rules))
       (let loop ((rule (car %target-rules))
                  (rest (cdr %target-rules)))
-        
+
         ;; N.B: here we assume target rule names and
         ;; predicates are exclusively strings.
         (if (string=? name (target-rule-get-name rule))
@@ -639,7 +652,7 @@ failure condition happens, mark the node as having failed."
               (node-set-logic! node 'and)
               ;; For target-rules, the prerequisites comes from the
               ;; rule itself.
-              
+
               ;; Oooh, recursion!
               (node-set-children! node
                                   (map (lambda (prereq)
@@ -651,52 +664,49 @@ failure condition happens, mark the node as having failed."
                 ;; else, no matching rule found
                 (node-set-rules! node '())))))
 
-    #|
     ;; If no rule found so far, search for suffix rules.
     (when (null? (node-get-rules node))
-    (for-each
-    (lambda (rule)
-    (let ((targ (suffix-rule-get-target rule)))
-    (when (or
-    ;; string suffix
-    (and (string? targ)
-    (string-suffix? targ name))
-    ;; procedure suffix
-    (and (procedure? targ)
-    (targ name)))
-    ;; For suffix rules, there will be exactly one child per
-    ;; rule and the name of the child is constructed from a
-    ;; suffix and the parent's name.
-    (node-set-rules! node (cons rule (node-get-rules node)))
-    (node-set-logic! node 'or)
-    (let* ((src (suffix-rule-get-source rule))
-    (prereq
-    (if (string? src)
-    (string-append
-    (string-drop-right name (string-length src))
-    src)
-    ;; else, src is a conversion func.
-    (src name))))
-    ;; Note the recursion here.
-    (node-set-children! node
-    (cons (create-node prereq node)
-    (node-get-children node)))))))
-    %suffix-rules))
+      (for-each
+       (lambda (rule)
+         (let ((targ (suffix-rule-get-target rule)))
+           (format #t "possible suffix rule ~S~%" rule)
+           (when (string-suffix? targ name)
+             ;; For suffix rules, there will be exactly one child per
+             ;; rule and the name of the child is constructed from a
+             ;; suffix and the parent's name.
+             (node-set-rules! node (cons rule (node-get-rules node)))
+             (node-set-logic! node 'or)
+             (let* ((src (suffix-rule-get-source rule))
+                    (prereq
+                     (string-append
+                      (string-drop-right name (string-length src))
+                      src)))
 
-    ;; First matching rule has highest priority
+               ;; Note the recursion here.
+               (node-set-children! node
+                                   (cons (create-node prereq node)
+                                         (node-get-children node)))))))
+       %suffix-rules))
+
+    ;; FIXME: First matching rule has highest priority? Or is last better?
     (node-set-rules! node (reverse (node-get-rules node)))
     (node-set-children! node (reverse (node-get-children node)))
-    |#
+    ;;(format #t "matching suffix rules ~S~%" (node-get-rules node))
+    ;;(format #t "matching children rules ~S~%" (node-get-children node))
+
     ;; And node is ready to go
     node))
 
 (define (build root)
   "Give a tree of <node>, this executes the recipes therein."
+  (format #t "BLAMMO 1 ~S~%" root)
   (let ((tree (create-node root #f)))
     (let ((node tree))
       (while #t
+        (when (>= %verbosity 2) (format #t "PRocessing ~S~%" (node-get-name node)))
         (if (undetermined? node)
             (begin
+              (when (>= %verbosity 3) (format #t "~S is undetermined~%" (node-get-name node)))
               (if (children-complete? node)
                   (if (children-passed? node)
                       (if (up-to-date? node)
@@ -712,12 +722,15 @@ failure condition happens, mark the node as having failed."
                   (set! node (get-next-child node))))
             ;; else, this node is determined
             (begin
-              (if (and (not %ignore-errors?) (failed? node))
-                  (break)
+              (when (>= %verbosity 2) (format #t "~S is determined ~S~%" (node-get-name node) (node-get-status node)))
+              #| (if (and (not %ignore-errors?) (failed? node))
+                  (break)|#
                   ;; else not failed
                   (if (has-parent? node)
                       (set! node (get-parent node))
                       ;; else, there is no parent to this node
-                      (break)))))))))
-
-
+                      (break))
+                  ;; )
+            ))))
+    ;; Return the command output of the root node
+    (passed? tree)))

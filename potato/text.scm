@@ -2,9 +2,12 @@
   #:export (underline
             default
             right-arrow
+            left-arrow
             ellipses
             C0
             red
+            lquo
+            rquo
             initialize-text))
 
 (define %fancy #t)

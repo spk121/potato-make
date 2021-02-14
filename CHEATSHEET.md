@@ -14,7 +14,7 @@ Add this at the top of your build script.
 Add this at the bottom of your build script
 
     (execute)
-    
+
 The rules go in between `initialize` and `build`
 
 ## MAKEVARS
@@ -46,50 +46,59 @@ have filenames or phony names.
        recipe-1
        recipe-2
        ...)
-       
+
      `target-name` is a string which is either a filename to be created
      or an phony name like "all" or "clean".
-     
+
      Recipe as a string to be evaluated by the system
-     
+
      (: "foo.o" '("foo.c")
        "cc -c foo.o")
-     
+
      Recipe as a procedure
-     
+
      (: "clean-foo" '()
        (lambda ()
          (delete-file "foo.o")))
-       
+
      Recipe as a procedure that returns #f to indicate failure
-     
+
      (: "recent" '()
        (lambda ()
          (if condition
            #t
            #f))))
-       
-     Recipe as a procedure returning a string to be evaluated by the system
-     
+
+     Recipe as a procedure returning a string to be evaluated by the
+     system
+
      (: "foo.o" '("foo.c")
        (lambda ()
          (format #f "cc ~A -c foo.c" some-flags))
-         
-     Recipe using recipe helper procedures, which create a string to be
-     evaluated by the system
-     
+
+     Recipe using recipe helper procedures, which create a string to
+     be evaluated by the system
+
      (: "foo.c" '("foo.c")
        (~ ($ CC) ($ CFLAGS) "-c" $<))
-       
+
+     Recipe as a boolean to indicate pass or failure without doing any
+     processing.  For example, the rule below tells Potato Make that
+     the file "foo.c" exists without actually testing for it.
+
+     (: "foo.c" '() #t)
+
 The *suffix rule* is a generic rule to convert one source file to
 a target file, based on the filename extensions.
 
      (-> ".c" ".o"
        (~ ($ CC) ($ CFLAGS) "-c" $< "-o" $@))
-       
+
 ## Recipe Helpers
 
-     Concatenate elements with `~`. `~` inserts spaces between the elements.
+     Concatenate elements with `~`. `~` inserts spaces between the
+     elements.
+
      Elements can be
      - strings
      - procedures that return strings
@@ -97,11 +106,11 @@ a target file, based on the filename extensions.
      - automatic variables
      - anything whose string representation as created by
        (format #f "~A" ...) make sense
-     
+
      Any procedures are applied lazily, when the rule is executed.
-     
+
      (~ "string" (lambda () "string") ($ KEY) $@ 100 )
-     
+
      Three versions of `~` with special effects
      (~- ...)   ignores any errors
      (~@ ...)   doesn't print recipe to console
@@ -110,7 +119,7 @@ a target file, based on the filename extensions.
 ## Automatic Variables
 
      Recipes can contain the following automatic variables
-     
+
      $@    the target
      $*    the target w/o a filename suffix
      $<    the first prerequisite

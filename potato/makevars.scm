@@ -25,7 +25,7 @@
 ;; If the '-e' flag is set level 1 doesn't override level 3 and 4.
 
 (define %ascii? #f)
-(define %makevars #f)
+(define %makevars (make-hash-table))
 (define %elevate-environment? #f)
 (define %strict #f)
 (define %verbose? #t)
@@ -190,7 +190,7 @@ the value of MAKEFLAGS or SHELL."
                              verbosity
                              ascii?)
   (set! %elevate-environment? elevate-environment?)
-  (set! %makevars (make-hash-table))
+  (hash-clear! %makevars)
   (set! %strict strict?)
   (set! %verbose? (= verbosity 3))
   (set! %ascii? ascii?)
