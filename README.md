@@ -20,7 +20,27 @@ Add this at the bottom of your build script
 
     (execute)
 
-The rules go in between `initialize` and `build`
+The rules go in between `initialize` and `build`.
+
+## A Simple Example
+
+    #!/usr/bin/env sh
+    exec guile -s "$0" "$@"
+    !#
+
+    (use-modules (potato make))
+    (initialize)
+    (:= CC "gcc")
+    (:= CFLAGS "-g -O2")
+    
+    (: "all" '("foo"))
+    (: "foo" '("foo.o" "bar.o")
+      (~ ($ CC) "-o" $@ $^))
+    (-> ".c" ".o"
+      (~ ($ CC) "-c" $<))
+    (execute)
+
+## Command-Line Arguments
 
 This boilerplate loads the library functions and it parses the
 command-line arguments.  The command-line arguments are the following,
