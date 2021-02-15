@@ -1,4 +1,4 @@
-# CHEATSHEET FOR POTATO MAKE
+# POTATO MAKE
 
 Potato Make is a scheme library that aims to simplify the task of
 maintaining, updating, and regenerating programs.  It is inspired by
@@ -82,6 +82,7 @@ command-line arguments.  The command-line arguments are the following,
 A hash table called `%makevars` has string keys. These procedures
 are syntax that add quotation marks around `key`, so you call them without the quotes on
 `key`. The returned value of `$` is a string, or an empty string on failure.
+You define makevars in the script, in the environment, or on the command line.
 
     ($ KEY) -> "VAL"
 
