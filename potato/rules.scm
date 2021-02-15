@@ -165,12 +165,10 @@ installs it as the system driver.  Returns the old system driver."
 (define* (target-rule name #:optional (prerequisites '()) #:rest recipes)
   "Register a new target rule"
 
-  (format #t "BLAMMO!! ~S~%" recipes)
-
-  (when (>= %verbosity 0)
+  (when (>= %verbosity 3)
     (if (null? prerequisites)
-        (format #t "Defining target rule: ~a~A~a~%" (lquo) name (rquo))
-        (format #t "Defining target rule: ~a~A~a ~A ~A~%" (lquo) name (rquo) (left-arrow) prerequisites)))
+        (format #t "Target rule: ~a~A~a~%~!" (lquo) name (rquo))
+        (format #t "Target rule: ~a~A~a ~A ~A~%~!" (lquo) name (rquo) (left-arrow) prerequisites)))
 
   ;; Empty recipes is shorthand for a recipe that always passes.
   (when (null? recipes)
@@ -226,8 +224,10 @@ installs it as the system driver.  Returns the old system driver."
   "Register a suffix rule"
 
   ;; FIXME: Typecheck
-  (when (>= %verbosity 0)
-    (format #t "Defining suffix rule: ~A ~A ~A~%" source (right-arrow) target))
+  (when (>= %verbosity 3)
+    (format #t "Suffix rule: ~a~A~a ~A ~a~A~a~%~!"
+            (lquo) source (rquo) (right-arrow) (lquo) target (rquo)))
+  
   ;; If any recipes are raw strings, we need to make them into
   ;; (cons 'default string)
   (let ((recipes2
@@ -376,6 +376,11 @@ installs it as the system driver.  Returns the old system driver."
       #t
       #f))
 
+(define (has-children? node)
+  (if (null? (node-get-children node))
+      #f
+      #t))
+
 (define (get-parent node)
   (node-get-parent node))
 
@@ -398,13 +403,16 @@ installs it as the system driver.  Returns the old system driver."
               #t
               #f)))))
 
-(define (node-depth-string node)
+(define (node-depth node)
   (let loop ((depth 0)
              (cur node))
     (if (has-parent? cur)
         (loop (1+ depth) (get-parent cur))
         ;;
-        (make-string (* 2 depth) #\space))))
+        depth)))
+  
+(define (node-depth-string node)
+  (make-string (* 2 (node-depth node)) #\space))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; AUTOMATIC VARIABLES
@@ -485,6 +493,7 @@ installs it as the system driver.  Returns the old system driver."
 ;; and target rules
 
 (define (add-builtins)
+  #|
   (-> ".c" ""
       (~ ($ CC) ($ CFLAGS) ($ LDFLAGS) "-o" $@ $<))
   (-> ".f" ""
@@ -492,6 +501,7 @@ installs it as the system driver.  Returns the old system driver."
   (-> ".sh" ""
       (~ "cp" $< $@)
       (~ "chmod a+x" $< $@))
+  |#
   (-> ".c" ".o"
       (~ ($ CC) ($ CFLAGS) "-c" $<))
   (-> ".f" ".o"
@@ -576,8 +586,8 @@ runs them one-by-one, quitting on the first success."
 
     (when (>= %verbosity 3)
       (if (passed? node)
-          (format #t "PASS: ~a~%" (node-get-name node))
-          (format #t "FAIL: ~a~%" (node-get-name node))))
+          (format #t "PASS: ~a~%~!" (node-get-name node))
+          (format #t "FAIL: ~a~%~!" (node-get-name node))))
     (node-get-status node)))
 
 (define (run-recipes! node recipes)
@@ -612,10 +622,10 @@ failure condition happens, mark the node as having failed."
 
          ((string? recipe)
           (when (= %verbosity 1)
-            (format #t "~a~%" (node-get-name node)))
+            (format #t "~a~%~!" (node-get-name node)))
           (when (or (and (= %verbosity 2) (not (eq? 'silent opt)))
                     (= %verbosity 3))
-            (format #t "~A~%" recipe))
+            (format #t "~A~%~!" recipe))
           (let ((retval (%system-proc recipe)))
             (if (zero? retval)
                 (set-pass! node)
@@ -628,10 +638,10 @@ failure condition happens, mark the node as having failed."
              ;; processed by system.
              ((string? retval)
               (when (= %verbosity 1)
-                (format #t "~a~%" (node-get-name node)))
+                (format #t "~a~%~!" (node-get-name node)))
               (when (or (and (= %verbosity 2) (not (eq? 'silent opt)))
                         (= %verbosity 3))
-                (format #t "~A~%" retval))
+                (format #t "~A~%~!" retval))
               (let ((retval2 (%system-proc retval)))
                 (if (zero? retval2)
                     (set-pass! node)
@@ -721,6 +731,8 @@ file exists."
 
 (define (create-node name parent)
   "Constructs a tree of nodes, with name as the root node."
+  (when (and (node? parent) (> (node-depth parent) 30))
+    (error "Stack overflow"))
   (let ((node (make-node name parent 'undetermined)))
     (node-set-children! node '())
     (node-set-rule-type! node 'default)
@@ -787,8 +799,8 @@ file exists."
     ;; FIXME: First matching rule has highest priority? Or is last better?
     (node-set-rules! node (reverse (node-get-rules node)))
     (node-set-children! node (reverse (node-get-children node)))
-    ;;(format #t "matching suffix rules ~S~%" (node-get-rules node))
-    ;;(format #t "matching children rules ~S~%" (node-get-children node))
+    ;;(format #t "matching suffix rules ~S~%~!" (node-get-rules node))
+    ;;(format #t "matching children rules ~S~%~!" (node-get-children node))
 
     ;; And node is ready to go
     node))
@@ -798,112 +810,134 @@ file exists."
 This is where the magic happens."
   (let ((tree (create-node root #f)))
     (let ((node tree))
-      (format #t "~ABegin building target ~a~A~a.~%"
-              (node-depth-string node) (lquo) (node-get-name node) (rquo))
+      (when (>= %verbosity 3)
+        (format #t "~ABegin building target ~a~A~a.~%~!"
+                (node-depth-string node) (lquo) (node-get-name node) (rquo)))
       (while #t
-        (format #t "~AConsidering target ~a~A~a.~%"
-                (node-depth-string node) (lquo) (node-get-name node) (rquo))
+        (when (>= %verbosity 3)
+          (format #t "~AConsidering target ~a~A~a.~%~!"
+                  (node-depth-string node) (lquo) (node-get-name node) (rquo)))
         (if (undetermined? node)
             (begin
-              (format #t "~ATarget file ~a~A~a is undetermined.~%"
-                      (node-depth-string node) (lquo) (node-get-name node) (rquo))
-              (unless (node-get-mtime node)
-                (format #t "~AFile ~a~A~a does not exist.~%"
-                        (node-depth-string node) (lquo) (node-get-name node) (rquo)))
+              (when (>= %verbosity 3)
+                (format #t "~ATarget file ~a~A~a is undetermined.~%~!"
+                        (node-depth-string node) (lquo) (node-get-name node) (rquo))
+                (unless (node-get-mtime node)
+                  (format #t "~AFile ~a~A~a does not exist.~%~!"
+                          (node-depth-string node) (lquo) (node-get-name node) (rquo))))
               (if (children-complete? node)
                   (begin
-                    (format #t "~AFinished prerequisites of target file ~a~A~a.~%"
-                            (node-depth-string node) (lquo) (node-get-name node) (rquo))
+                    (when (and (>= %verbosity 3) (has-children? node))
+                      (format #t "~AFinished prerequisites of target file ~a~A~a.~%~!"
+                              (node-depth-string node) (lquo) (node-get-name node) (rquo)))
                     (if (children-passed? node)
                         (begin
-                          (format #t "~AThe prerequisites of target file ~a~A~a have passed.~%"
-                                  (node-depth-string node) (lquo) (node-get-name node) (rquo))
+                          (when (and (>= %verbosity 3) (has-children? node))
+                            (format #t "~AThe prerequisites of target file ~a~A~a have passed.~%~!"
+                                    (node-depth-string node) (lquo) (node-get-name node) (rquo)))
                           (if (up-to-date? node)
                             (begin
                               (when (node-get-mtime node)
-                                (format #t "~ATarget file ~a~A~a is up to date.~%"
-                                        (node-depth-string node)
-                                        (lquo) (node-get-name node) (rquo)))
+                                (when (>= %verbosity 3)
+                                  (format #t "~ATarget file ~a~A~a is up to date.~%~!"
+                                          (node-depth-string node)
+                                          (lquo) (node-get-name node) (rquo))))
                               (set-pass! node))
                             ;; else, not up to date
                             (begin
-                              (format #t "~ATarget file ~a~A~a is not up to date.~%"
-                                      (node-depth-string node)
-                                      (lquo) (node-get-name node) (rquo))
+                              (when (>= %verbosity 3)
+                                (format #t "~ATarget file ~a~A~a is not up to date.~%~!"
+                                        (node-depth-string node)
+                                        (lquo) (node-get-name node) (rquo)))
                               (cond
                                ((using-target-rule? node)
-                                (format #t "~ATarget file ~a~A~a has a target rule.~%"
-                                        (node-depth-string node)
-                                        (lquo) (node-get-name node) (rquo))
+                                (when (>= %verbosity 3)
+                                  (format #t "~ATarget file ~a~A~a has a target rule.~%~!"
+                                          (node-depth-string node)
+                                          (lquo) (node-get-name node) (rquo)))
                                 (run-target-rule! node))
                                ((using-suffix-rules? node)
-                                (format #t "~ATarget file ~a~A~a has a suffix rule.~%"
-                                        (node-depth-string node)
-                                        (lquo) (node-get-name node) (rquo))
+                                (when (>= %verbosity 3)
+                                  (format #t "~ATarget file ~a~A~a has a suffix rule.~%~!"
+                                          (node-depth-string node)
+                                          (lquo) (node-get-name node) (rquo)))
                                 (run-suffix-rules! node))
                                ((using-default-rule? node)
-                                (format #t "~ATarget file ~a~A~a is using the default rule.~%"
-                                        (node-depth-string node)
-                                        (lquo) (node-get-name node) (rquo))
+                                (when (>= %verbosity 3)
+                                  (format #t "~ATarget file ~a~A~a is using the default rule.~%~!"
+                                          (node-depth-string node)
+                                          (lquo) (node-get-name node) (rquo)))
                                 (run-default-rule! node))
                                (else
                                 (error "bad rules")))
 
                               (if (passed? node)
-                                  (format #t "~A[PASS] target file ~a~A~a.~%"
-                                          (node-depth-string node)
-                                          (lquo) (node-get-name node) (rquo))
-                                  (format #t "~A[FAIL] target file ~a~A~a.~%"
-                                          (node-depth-string node)
-                                          (lquo) (node-get-name node) (rquo))))))
+                                  (when (>= %verbosity 3)
+                                    (format #t "~ATarget file ~a~A~a has passed.~%~!"
+                                            (node-depth-string node)
+                                            (lquo) (node-get-name node) (rquo)))
+                                  (when (>= %verbosity 3)
+                                    (format #t "~ATarget file ~a~A~a has failed.~%~!"
+                                            (node-depth-string node)
+                                            (lquo) (node-get-name node) (rquo)))))))
                         ;; else, children have failed
                         (begin
-                          (format #t "~AThe prerequisites of target file ~a~A~a have failed.~%"
-                                  (node-depth-string node) (lquo) (node-get-name node) (rquo))
+                          (when (>= %verbosity 3)
+                            (format #t "~AThe prerequisites of target file ~a~A~a have failed.~%~!"
+                                    (node-depth-string node) (lquo) (node-get-name node) (rquo)))
                           (set-fail! node))))
                   ;; else, children aren't complete
                   (begin
-                    (format #t "~AThe prerequisites of target file ~a~A~a are incomplete.~%"
-                            (node-depth-string node) (lquo) (node-get-name node) (rquo))
+                    (when (>= %verbosity 3)
+                      (format #t "~AThe prerequisites of target file ~a~A~a are incomplete.~%~!"
+                              (node-depth-string node) (lquo) (node-get-name node) (rquo)))
                     (let ((next (get-next-child node)))
-                      (format #t "~ANew node ~a~A~a ~a ~a~A~a.~%"
-                              (node-depth-string node)
-                              (lquo) (node-get-name node) (rquo)
-                              (right-arrow)
-                              (lquo) (node-get-name next) (rquo))
+                      (when (>= %verbosity 3)
+                        (format #t "~ADescending node ~a~A~a ~a ~a~A~a.~%~!"
+                                (node-depth-string node)
+                                (lquo) (node-get-name node) (rquo)
+                                (right-arrow)
+                                (lquo) (node-get-name next) (rquo)))
                       (set! node (get-next-child node))
-                      (format #t "~ATarget is now ~a~A~a.~%~!"
-                              (node-depth-string node)
-                              (lquo) (node-get-name node) (rquo)))
-                    )))
+                      ))))
             ;; else, this node is determined
             (begin
               (if (passed? node)
-                  (format #t "~ATarget file ~a~A~a is passed.~%"
-                          (node-depth-string node) (lquo) (node-get-name node) (rquo))
-                  (format #t "~ATarget file ~a~A~a has failed.~%"
-                          (node-depth-string node) (lquo) (node-get-name node) (rquo)))
+                  (when (>= %verbosity 2)
+                    (format #t "~A~a~A~a: ~Apass~A~%~!"
+                            (node-depth-string node) (lquo) (node-get-name node) (rquo)
+                            (green) (default)))
+                  (when (>= %verbosity 2)
+                    (format #t "~A~a~A~a: ~Afail~A~%~!"
+                            (node-depth-string node) (lquo) (node-get-name node) (rquo)
+                            (red) (default))))
               (if (has-parent? node)
                   (begin
-                    (format #t "~ANew node ~a~A~a ~a ~a~A~a.~%"
-                            (node-depth-string node)
-                            (lquo) (node-get-name node) (rquo)
-                            (right-arrow)
-                            (lquo) (node-get-name (node-get-parent node)) (rquo))
+                    (when (>= %verbosity 3)
+                      (format #t "~AAscending node ~a~A~a ~a ~a~A~a.~%~!"
+                              (node-depth-string node)
+                              (lquo) (node-get-name node) (rquo)
+                              (right-arrow)
+                              (lquo) (node-get-name (node-get-parent node)) (rquo)))
 
                     (set! node (get-parent node)))
                   ;; else, there is no parent to this node
                   (begin
-                    (format #t "~ATarget file ~a~A~a has no parent.~%"
-                            (node-depth-string node)
-                            (lquo) (node-get-name node) (rquo))
+                    (when (>= %verbosity 3)
+                      (format #t "~ATarget file ~a~A~a has no parent.~%~!"
+                              (node-depth-string node)
+                              (lquo) (node-get-name node) (rquo)))
                     (if (passed? node)
-                        (format #t "~A[COMPLETE] [PASS] target file ~a~A~a.~%"
-                                (node-depth-string node)
-                                (lquo) (node-get-name node) (rquo))
-                        (format #t "~A[COMPLETE] [FAIL] target file ~a~A~a.~%"
-                                (node-depth-string node)
-                                (lquo) (node-get-name node) (rquo)))
+                        (when (>= %verbosity 1)
+                          (format #t "~A~a~A~a: ~Acomplete~A~%~!"
+                                  (node-depth-string node)
+                                  (lquo) (node-get-name node) (rquo)
+                                  (green) (default)))
+                        (when (>= %verbosity 1)
+                          (format #t "~A~a~A~a: ~Acomplete~A~%~!"
+                                  (node-depth-string node)
+                                  (lquo) (node-get-name node) (rquo)
+                                  (red) (default))))
                     (break)))))))
     ;; Return the command output of the root node
     (passed? tree)))

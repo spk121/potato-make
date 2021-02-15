@@ -24,6 +24,8 @@
 ;; The lower priority level always win, unless the '-e' flag was set
 ;; If the '-e' flag is set level 1 doesn't override level 3 and 4.
 
+(define %level-name '("unknown" "script" "command-line" "makeflags" "environment" "built-in"))
+
 (define %ascii? #f)
 (define %makevars (make-hash-table))
 (define %elevate-environment? #f)
@@ -73,11 +75,12 @@ priority."
   (let* ((val&priority (hash-ref %makevars key))
          (old-val (if (pair? val&priority) (cdr val&priority) #f))
          (old-priority (if (pair? val&priority) (cdr val&priority) #f)))
-    (if (or (not old-val)
-            (override? old-priority new-priority))
-        (if (procedure? new-val)
-            (hash-set! %makevars key (cons (delay new-val) new-priority))
-            (hash-set! %makevars key (cons new-val new-priority)))))
+    (when (or (not old-val)
+              (override? old-priority new-priority))
+      (if (procedure? new-val)
+          (hash-set! %makevars key (cons (delay new-val) new-priority))
+          (hash-set! %makevars key (cons new-val new-priority)))
+      (when %verbose? (print-makevar key))))
   *unspecified*)
 
 (define (makevars-add-keyvals keyvals)
@@ -127,6 +130,45 @@ the value of MAKEFLAGS or SHELL."
    (lambda (keyval)
      (makevars-set (car keyval) (cdr keyval) 5))
    builtin-makevars))
+
+(define (print-makevar key)
+  (let ((val (hash-ref %makevars key)))
+    (let ((keyval-string
+           (if (zero? (string-length (car val)))
+               (string-copy key)
+               (string-append key " " (right-arrow) " " (car val)))))
+      ;; Replace any control characters in VAL, like newline or tab
+      (set! keyval-string
+        (string-fold
+         (lambda (c str)
+           (string-append str
+                          (if (char<? c #\space)
+                              (C0 c)
+                              (string c))))
+         ""
+         keyval-string))
+      ;; Truncate
+      (if (> (string-length keyval-string) 60)
+          (if %ascii?
+              (set! keyval-string
+                (string-append (substring keyval-string 0 57) "..."))
+              (set! keyval-string
+                (string-append (substring keyval-string 0 59) "…"))))
+      (let* ((space (make-string (- 64 (string-length keyval-string))
+                                 #\space))
+             (priority (cdr val))
+             (source-string (list-ref '("unknown"
+                                        "script"
+                                        "command line"
+                                        "MAKEFLAGS"
+                                        "environment"
+                                        "built-in")
+                                      priority)))
+        (display "Var:  ")
+        (display keyval-string)
+        (display space)
+        (display source-string)
+        (newline)))))
 
 (define (dump-makevars)
   "Write out a list of the current makevars."
@@ -199,9 +241,7 @@ the value of MAKEFLAGS or SHELL."
   (when (or environment? elevate-environment?)
     (makevars-add-environment)
     (makevars-add-makeflags))
-  (makevars-add-keyvals keyvals)
-  (when %verbose?
-    (dump-makevars)))
+  (makevars-add-keyvals keyvals))
 
 ;; API
 (define* (lazy-assign key #:optional (val ""))
@@ -218,9 +258,7 @@ referenced.
     (set! key (key)))
   (unless (string? key)
     (set! key (format #f "~a" key)))
-  (makevars-set key (delay val))
-  (when %verbose?
-    (format #t "~A=~A~%" key val)))
+  (makevars-set key (delay val)))
 
 (define-syntax ?=
   (lambda (stx)
@@ -245,9 +283,7 @@ string to use as the key in the hash table entry.
     (set! val (val)))
   (unless (string? val)
     (set! val (format #f "~a" val)))
-  (makevars-set key val)
-  (when %verbose?
-    (format #t "~A=~A~%" key val)))
+  (makevars-set key val))
 
 (define-syntax :=
   (lambda (stx)
@@ -283,7 +319,7 @@ space-separated token in the looked-up value."
          (priority (if (pair? val&priority) (cdr val&priority) #f)))
     (if (not val)
         (if %strict
-            (error (format #t "There is no makevar for key ~a~%" key))
+            (error (format #t "There is no makevar for key ~a~%~!" key))
             ;; else
             (if quoted?
                 "\"\""
@@ -307,8 +343,7 @@ space-separated token in the looked-up value."
            (else
             (set! val (format #f "~a" val))))
           (hash-set! %makevars key (cons val priority))
-          (when %verbose?
-            (format #t "~A=~A~%" key val))
+          (when %verbose? (print-makevar key))
           (when (procedure? transformer)
             (set! val (string-append-with-spaces
                        (map transformer

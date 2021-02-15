@@ -5,7 +5,7 @@
             left-arrow
             ellipses
             C0
-            red
+            red green
             lquo
             rquo
             initialize-text))
