@@ -1,0 +1,216 @@
+#!/usr/bin/env sh
+exec guile -L . -s "$0" "$@"
+!#
+(use-modules (potato parse-lib)
+             (potato parse)
+             (ice-9 receive)
+             (srfi srfi-1)
+             (srfi srfi-64))
+
+(test-begin "string-count-backslashes-at-end")
+
+(test-equal "count backslashes at end of empty string"
+  0
+  (string-count-backslashes-at-end ""))
+
+(test-equal "terminal backslash"
+  1
+  (string-count-backslashes-at-end (string #\\)))
+
+(test-equal "two terminal backslashes"
+  2
+  (string-count-backslashes-at-end (string #\\ #\\)))
+
+(test-equal "char plus terminal backslash"
+  1
+  (string-count-backslashes-at-end (string #\A #\\)))
+
+(test-equal "char plus two terminal backslashes"
+  2
+  (string-count-backslashes-at-end (string #\A #\\ #\\)))
+
+(test-equal "initial backslash plus char"
+  0
+  (string-count-backslashes-at-end (string #\\ #\A)))
+
+(test-equal "two initial backslashes plus char"
+  0
+  (string-count-backslashes-at-end (string #\\ #\\ #\A)))
+
+(test-end "string-count-backslashes-at-end")
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+(test-begin "string-find-char-unquote")
+
+(test-equal "empty string"
+  #f
+  (string-find-char-unquote "" #\x))
+
+(test-equal "one character string match"
+  0
+  (string-find-char-unquote "a" #\a))
+
+(test-equal "one character string no match"
+  #f
+  (string-find-char-unquote "a" #\b))
+
+(test-equal "two character string match"
+  1
+  (string-find-char-unquote "ab" #\b))
+
+(test-equal "two character string no match"
+  #f
+  (string-find-char-unquote "ab" #\c))
+
+(test-equal "two character string quoted"
+  #f
+  (string-find-char-unquote "a\\b" #\b))
+
+(test-equal "three character string match"
+  2
+  (string-find-char-unquote "abc" #\c))
+
+(test-equal "three character string no match"
+  #f
+  (string-find-char-unquote "abc" #\d))
+
+(test-equal "three character string quoted"
+  #f
+  (string-find-char-unquote "ab\\c" #\c))
+
+(test-equal "three character string double-quoted"
+  3
+  (string-find-char-unquote "ab\\\\c" #\c))
+
+(test-assert "single backslashes are elided in output string"
+  (receive (n str)
+      (string-find-char-unquote "ab\\cc" #\c)
+    (string=? str "abcc")))
+
+(test-assert "double-backslashes are halved in output string"
+  (receive (n str)
+      (string-find-char-unquote "ab\\\\c" #\c)
+    (string=? str "ab\\c")))
+
+(test-assert "three backslashes become one backslash in output string"
+  (receive (n str)
+      (string-find-char-unquote "ab\\\\\\cc" #\c)
+    (string=? str "ab\\cc")))
+
+(test-equal "find first of two stop chars"
+  1
+  (string-find-char-unquote " A B" #\A #\B))
+
+(test-equal "find second of two stop chars"
+  1
+  (string-find-char-unquote " B A" #\A #\B))
+
+(test-equal "stop at whitespace when flag set"
+  0
+  (string-find-char-unquote " A" #\A #:blank #t))
+
+(test-equal "skip quoted variables whitespace when flag is set"
+  4
+  (string-find-char-unquote "${A}A" #\A #:ignorevars #t))
+
+(test-end "string-find-char-unquote")
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+(test-begin "string-remove-comments")
+
+(test-equal "uncommented lines pass through"
+  "abc"
+  (string-remove-comments "abc"))
+
+(test-equal "remove comments at beginning of line"
+  ""
+  (string-remove-comments "#abc"))
+
+(test-equal "remove comments at end of line"
+  "abc"
+  (string-remove-comments "abc#"))
+
+(test-equal "remove comments in the middle of a line"
+  "ab"
+  (string-remove-comments "ab#c"))
+
+(test-equal "backslash prevents comment"
+  "ab\\#c"
+  (string-remove-comments "ab\\#c"))
+
+(test-end "string-remove-comments")
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+(test-begin "read-line-handle-escaped-newline")
+
+(test-assert "empty string with no newline"
+  (receive (str n)
+      (with-input-from-string "" read-line-handle-escaped-newline)
+    (and
+     (string-null? str)
+     (zero? n))))
+
+(test-assert "non-empty string with no newline"
+  (receive (str n)
+      (with-input-from-string "a" read-line-handle-escaped-newline)
+    (and
+     (string=? str "a\n")
+     (= n 1))))
+
+(test-assert "non-empty string with terminal backslash and no newline"
+  (receive (str n)
+      (with-input-from-string "a\\" read-line-handle-escaped-newline)
+    (and
+     (string=? str "a\n")
+     (= n 1))))
+
+(test-assert "empty string with newline"
+  (receive (str n)
+      (with-input-from-string "\n" read-line-handle-escaped-newline)
+    (and
+     (string=? str "\n")
+     (= n 1))))
+
+(test-assert "non-empty string with newline"
+  (receive (str n)
+      (with-input-from-string "a\n" read-line-handle-escaped-newline)
+    (and
+     (string=? str "a\n")
+     (= n 1))))
+
+(test-assert "non-empty string with terminal backslash and newline"
+  (receive (str n)
+      (with-input-from-string "a\\\n" read-line-handle-escaped-newline)
+    (and
+     (string=? str "a\n")
+     (= n 1))))
+
+(test-assert "empty string with newline plus 2nd line"
+  (receive (str n)
+      (with-input-from-string "\na\n" read-line-handle-escaped-newline)
+    (and
+     (string=? str "\n")
+     (= n 1))))
+
+(test-assert "non-empty string with newline plus 2nd line"
+  (receive (str n)
+      (with-input-from-string "a\nb\n" read-line-handle-escaped-newline)
+    (and
+     (string=? str "a\n")
+     (= n 1))))
+
+(test-assert "non-empty string with terminal backslash and newline plus 2nd line"
+  (receive (str n)
+      (with-input-from-string "a\\\nb\n" read-line-handle-escaped-newline)
+    (and
+     (string=? str "a\nb\n")
+     (= n 2))))
+
+(test-end "read-line-handle-escaped-newline")
+
+
+;; Local Variables:
+;; mode: scheme
+;; End:
