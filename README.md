@@ -208,3 +208,10 @@ target file, based on the filename extensions.
            as a single space-separated string
      $$?   the prerequisites that are files newer than the target file
            as a scheme list of strings
+
+## POSIX Makefile Parser
+
+     Recipes can contain the following parser function
+
+     (parse ...) reads a standard Makefile and creates
+     rules based on its contents.

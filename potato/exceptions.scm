@@ -1,4 +1,4 @@
-(define-module (potato exceptions)
+-(define-module (potato exceptions)
   #:use-module (ice-9 exceptions)
   #:export (bad-key-type
             bad-value-type

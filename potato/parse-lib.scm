@@ -9,10 +9,16 @@
   #:use-module (potato text)
   #:export(
            read-line-handle-escaped-newline
+           string-collapse-continuations
            string-count-backslashes-at-end
            string-count-matching-chars-at-end
            string-find-char-unquote
+           string-find-preceding-backslashes
+           string-find-repeated-chars
+           string-next-token
            string-remove-comments
+           string-starts-with?
+           string-shrink-whitespace
            ))
 
 (define (read-line-handle-escaped-newline)
@@ -36,6 +42,42 @@ It returns two values
                     (1+ nline))
               ;; else
               (values (string-append output line "\n") (1+ nline)))))))
+
+(define* (string-collapse-continuations str #:optional (squash-whitespace? #f))
+  "Returns a new string where backslash+newline is discarded, and
+backslash+backslash+newline becomes backslash+newline. Any whitespace
+after the newline may be squashed to a single space, if
+squash-whitespace? is #t."
+  (let loop ((str str)
+             (newline-index (string-rindex str #\newline)))
+    (if (not newline-index)
+        (string-copy str)
+        ;; else
+        (let* ((backslash-index (string-find-preceding-backslashes str newline-index))
+               (backslash-count (- newline-index backslash-index)))
+          (cond
+           ((even? backslash-count)
+            ;; We cut the number of backslashes in half, but, keep the newline.
+            (loop
+             (string-append
+              (substring str 0 backslash-index)
+              (make-string (quotient backslash-count 2) #\\)
+              (substring str newline-index))
+             (string-rindex str #\newline 0 backslash-index)))
+
+           (else
+            ;; We cut the number of backslashes in half, remove a backslash
+            ;; and newline, maybe squash any following whitespace.
+            (loop
+             (string-append
+              (substring str 0 backslash-index)
+              (make-string (quotient backslash-count 2) #\\)
+              (if squash-whitespace?
+                  (string-shrink-whitespace
+                   (substring str (1+ newline-index))
+                   0)
+                  (substring str (1+ newline-index))))
+             (string-rindex str #\newline 0 backslash-index))))))))
 
 (define (string-count-backslashes-at-end str)
   (string-count-matching-chars-at-end str #\\))
@@ -138,9 +180,75 @@ Returns two values
         (values i str2)
         (values #f #f))))
 
+(define (string-find-preceding-backslashes str i)
+  "Given I, a position in a string, this returns a position,
+of first of a range sequential backslashes that immediately precedes
+that position in the string. If no backslashes precede that position,
+I is returned."
+  (let loop ((j i))
+    (cond
+     ((= j 0)
+      0)
+     ((char=? (string-ref str (1- j)) #\\)
+      (loop (1- j)))
+     (else
+      j))))
+
+(define (string-find-repeated-chars str c)
+  "Given a character c, this finds the position of of first instance
+of the character in the string. If the character repeats, it returns,
+as a pair, the position of the character, and the position after the
+run of characters.  If the character is not present, it returns #f"
+  (let ((i (string-index str c)))
+    (if (not i)
+        #f
+        ;; else
+        (let ((len (string-length str)))
+          (if (= (1+ i) len)
+              (cons i (1+ i))
+              ;; else
+              (let loop ((j (1+ i)))
+                (if (false-if-exception (char=? (string-ref str j) c))
+                    (loop (1+ j))
+                    ;; else
+                    (cons i j))))))))
+
+(define (string-next-token str i)
+  "Given a position i, this returns the position of the first
+non-whitespace character after i. If the end of line is reached,
+it returns the length of the string."
+  (or
+   (string-index str
+                 (lambda (c)
+                   (char-set-contains? char-set:blank c))
+                 i)
+   (string-length str)))
+
 (define (string-remove-comments str)
   "Returns a copy of str with any '#' comments removed"
   (let ((i (string-find-char-unquote str #\#)))
     (if i
         (string-take str i)
         (string-copy str))))
+
+(define (string-shrink-whitespace str start)
+  "Given a string, and a location in a string, this returns a new copy
+of string where all the whitespace beginning at location i is replaced
+by a single space"
+  (let ((len (string-length str)))
+    (if (or (>= start len)
+            (not (char-set-contains? char-set:blank (string-ref str start))))
+        (string-copy str)
+        ;; else
+        (let loop ((end start))
+          (cond
+           ((>= end len)
+            (string-append (substring str 0 start) " "))
+           ((char-set-contains? char-set:blank (string-ref str end))
+            (loop (1+ end)))
+           (else
+            (string-append (substring str 0 start) " " (substring str end))))))))
+
+
+(define (string-starts-with? str c)
+  (char=? (string-ref str 0) c))

@@ -2,7 +2,7 @@
 exec guile -L . -s "$0" "$@"
 !#
 (use-modules (potato parse-lib)
-             (potato parse)
+             ;; (potato parse)
              (ice-9 receive)
              (srfi srfi-1)
              (srfi srfi-64))
@@ -210,7 +210,165 @@ exec guile -L . -s "$0" "$@"
 
 (test-end "read-line-handle-escaped-newline")
 
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
+(test-begin "string-shrink-whitespace")
+
+(test-equal "no whitespace at location"
+  "abc"
+  (string-shrink-whitespace "abc" 0))
+
+(test-equal "single space at beginning of line"
+  " abc"
+  (string-shrink-whitespace " abc" 0))
+
+(test-equal "single tab at beginning of line"
+  " abc"
+  (string-shrink-whitespace "\tabc" 0))
+
+(test-equal "multiple spaces at beginning of line"
+  " abc"
+  (string-shrink-whitespace "   abc" 0))
+
+(test-equal "multiple tabs at beginning of line"
+  " abc"
+  (string-shrink-whitespace "\t\t\tabc" 0))
+
+(test-equal "single space in middle of line"
+  "ab cd"
+  (string-shrink-whitespace "ab cd" 2))
+
+(test-equal "single tab in middle of line"
+  "ab cd"
+  (string-shrink-whitespace "ab\tcd" 2))
+
+(test-equal "multiple spaces in middle of line"
+  "ab cd"
+  (string-shrink-whitespace "ab   cd" 2))
+
+(test-equal "multiple tabs in middle of line"
+  "ab cd"
+  (string-shrink-whitespace "ab\t\t\tcd" 2))
+
+(test-equal "single space at end of line"
+  "ab "
+  (string-shrink-whitespace "ab " 2))
+
+(test-equal "single tab at end of line"
+  "ab "
+  (string-shrink-whitespace "ab\t" 2))
+
+(test-equal "multiple spaces at end of line"
+  "ab "
+  (string-shrink-whitespace "ab   " 2))
+
+(test-equal "multiple tabs at end of line"
+  "ab "
+  (string-shrink-whitespace "ab\t\t\t" 2))
+
+(test-end "string-shrink-whitespace")
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+(test-begin "string-find-repeated-chars")
+
+(test-equal "empty string"
+  #f
+  (string-find-repeated-chars "" #\a))
+
+(test-equal "single-char non-matching string"
+  #f
+  (string-find-repeated-chars "a" #\b))
+
+(test-equal "single-char matching string"
+  '(0 . 1)
+  (string-find-repeated-chars "a" #\a))
+
+(test-equal "non-matching string"
+  #f
+  (string-find-repeated-chars "abcdef" #\g))
+
+(test-equal "matching non-repeating string"
+  '(2 . 3)
+  (string-find-repeated-chars "abcdef" #\c))
+
+(test-equal "matching repeating string"
+  '(2 . 5)
+  (string-find-repeated-chars "abcccdef" #\c))
+
+(test-end "string-find-repeated-chars")
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+(test-begin "string-find-preceding-backslashes")
+
+(test-equal "empty string"
+  0
+  (string-find-preceding-backslashes "" 0))
+
+(test-equal "single-character string"
+  0
+  (string-find-preceding-backslashes "a" 0))
+
+(test-equal "two-character string w/o backslashes"
+  1
+  (string-find-preceding-backslashes "ab" 1))
+
+(test-equal "two-character string with a backslash"
+  0
+  (string-find-preceding-backslashes "\\b" 1))
+
+(test-equal "three-character string with a backslash"
+  1
+  (string-find-preceding-backslashes "a\\b" 2))
+
+(test-equal "three-character string with two backslash"
+  0
+  (string-find-preceding-backslashes "\\\\b" 2))
+
+(test-end "string-find-preceding-backslashes")
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+(test-begin "string-collapse-continuations")
+
+(test-equal "empty string"
+  ""
+  (string-collapse-continuations ""))
+
+(test-equal "string with no newline"
+  "abc"
+  (string-collapse-continuations "abc"))
+
+(test-equal "string with terminal newline"
+  "abc\n"
+  (string-collapse-continuations "abc\n"))
+
+(test-equal "string with medial newline"
+  "abc\ndef"
+  (string-collapse-continuations "abc\ndef"))
+
+(test-equal "string with terminal continuation"
+  "abc"
+  (string-collapse-continuations "abc\\\n"))
+
+(test-equal "string with medial continuation"
+  "abcdef"
+  (string-collapse-continuations "abc\\\ndef"))
+
+(test-equal "string with medial continuation and single whitespace"
+  "abc def"
+  (string-collapse-continuations "abc\\\n def"))
+
+(test-equal "string with medial continuation and multiple whitespace"
+  "abc  def"
+  (string-collapse-continuations "abc\\\n  def"))
+
+(test-equal "string with medial continuation and multiple whitespace, squash"
+  "abc def"
+  (string-collapse-continuations "abc\\\n  def" #t))
+
+(test-end "string-collapse-continuations")
 ;; Local Variables:
 ;; mode: scheme
 ;; End:
