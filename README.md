@@ -9,9 +9,7 @@ build script in Guile Scheme.
 
 Add this at the top of your build script.
 
-    #!/usr/bin/env sh
-    exec guile -s "$0" "$@"
-    !#
+    #!/usr/bin/env -S guile -s "$0" "$@"
 
     (use-modules (potato make))
     (initialize)
@@ -24,9 +22,7 @@ The rules go in between `initialize` and `build`.
 
 ## A Simple Example
 
-    #!/usr/bin/env sh
-    exec guile -s "$0" "$@"
-    !#
+    #!/usr/bin/env -S guile -s "$0" "$@"
 
     (use-modules (potato make))
     (initialize)
