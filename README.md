@@ -2,7 +2,7 @@
 
 Potato Make is a scheme library that aims to simplify the task of
 maintaining, updating, and regenerating programs.  It is inspired by
-the `make` utility in POSIX.  With this library, you can write a
+the `make` utility in IEEE Std 1003.1-2017 (POSIX).  With this library, you can write a
 build script in Guile Scheme.
 
 ## Boilerplate
