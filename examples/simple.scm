@@ -1,6 +1,4 @@
-#!/usr/bin/env sh
-exec guile -s "$0" "$@"
-!#
+#!/usr/bin/env -S guile -s "$0" "$@"
 
 (use-modules (potato make))
 (initialize)
