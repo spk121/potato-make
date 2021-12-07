@@ -7,7 +7,7 @@ exec guile -s "$0" "$@"
 (use-modules (potato make))
 (initialize)
 
-(: "hello")
-  (~ (display "Hello from potato-make!\n"))
+(: "hello" '()
+  (~ (display "Hello from potato-make!\n")))
 
 (execute)
