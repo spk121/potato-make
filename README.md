@@ -1,9 +1,6 @@
 # POTATO MAKE
 
-Potato Make is a scheme library that aims to simplify the task of
-maintaining, updating, and regenerating programs.  It is inspired by
-the `make` utility in POSIX.  With this library, you can write a
-build script in Guile Scheme.
+Potato Make is a scheme library that aims to simplify the task of maintaining, updating, and regenerating programs.  It is inspired by the `make` utility in POSIX.  With this library, you can write a build script in Guile Scheme.
 
 ## Boilerplate
 
@@ -42,8 +39,7 @@ The rules go in between `initialize` and `build`.
 
 ## Command-Line Arguments
 
-This boilerplate loads the library functions and it parses the
-command-line arguments.  The command-line arguments are the following,
+This boilerplate loads the library functions and it parses the command-line arguments.  The command-line arguments are the following,
 
     <your-script-name> [-hvqVeEbknB] [var=value...] [target_name...]
              -h, --help
@@ -79,9 +75,8 @@ command-line arguments.  The command-line arguments are the following,
 
 ## MAKEVARS
 
-A hash table called `%makevars` has string keys. These procedures
-are syntax that add quotation marks around `key`, so you call them without the quotes on
-`key`. The returned value of `$` is a string, or an empty string on failure.
+A hash table called `%makevars` has string keys. These procedures are syntax that add quotation marks around `key`, so you call them without the quotes on `key`. The returned value of `$` is a string, or an empty string on failure.
+
 You define makevars in the script, in the environment, or on the command line.
 
     ($ KEY) -> "VAL"
@@ -105,8 +100,7 @@ You define makevars in the script, in the environment, or on the command line.
 
 ## Rules
 
-The *target rule* is for when the target, and the prerequisites, if any,
-have filenames or phony names.
+The *target rule* is for when the target, and the prerequisites, if any have filenames or phony names.
 
     (: target-name '(prereq-name-1 prereq-name-2 ...)
        recipe-1
@@ -167,8 +161,7 @@ have filenames or phony names.
      
      (: "fail" '() #f)
 
-The *suffix rule* is a generic rule to convert one source file to a
-target file, based on the filename extensions.
+The *suffix rule* is a generic rule to convert one source file to a target file, based on the filename extensions.
 
      (-> ".c" ".o"
        (~ ($ CC) ($ CFLAGS) "-c" $< "-o" $@))
