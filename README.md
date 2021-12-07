@@ -9,36 +9,42 @@ build script in Guile Scheme.
 
 Add this at the top of your build script.
 
-    #!/usr/bin/env sh
-    exec guile -s "$0" "$@"
-    !#
+```scheme    
+#!/usr/bin/env sh
+exec guile -s "$0" "$@"
+!#
 
-    (use-modules (potato make))
-    (initialize)
+(use-modules (potato make))
+(initialize)
+```
 
 Add this at the bottom of your build script
 
-    (execute)
+```scheme
+(execute)
+```
 
 The rules go in between `initialize` and `build`.
 
 ## A Simple Example
 
-    #!/usr/bin/env sh
-    exec guile -s "$0" "$@"
-    !#
+```scheme
+#!/usr/bin/env sh
+exec guile -s "$0" "$@"
+!#
 
-    (use-modules (potato make))
-    (initialize)
-    (:= CC "gcc")
-    (:= CFLAGS "-g -O2")
+(use-modules (potato make))
+(initialize)
+(:= CC "gcc")
+(:= CFLAGS "-g -O2")
     
-    (: "all" '("foo"))
-    (: "foo" '("foo.o" "bar.o")
-      (~ ($ CC) "-o" $@ $^))
-    (-> ".c" ".o"
-      (~ ($ CC) "-c" $<))
-    (execute)
+(: "all" '("foo"))
+(: "foo" '("foo.o" "bar.o")
+  (~ ($ CC) "-o" $@ $^))
+(-> ".c" ".o"
+  (~ ($ CC) "-c" $<))
+(execute)
+```
 
 ## Command-Line Arguments
 
@@ -108,70 +114,90 @@ You define makevars in the script, in the environment, or on the command line.
 The *target rule* is for when the target, and the prerequisites, if any,
 have filenames or phony names.
 
-    (: target-name '(prereq-name-1 prereq-name-2 ...)
-       recipe-1
-       recipe-2
-       ...)
+```scheme
+(: target-name '(prereq-name-1 prereq-name-2 ...)
+   recipe-1
+   recipe-2
+   ...)
+```
 
-     `target-name` is a string which is either a filename to be
-     created or an phony name like "all" or "clean".
+`target-name` is a string which is either a filename to be
+created or an phony name like "all" or "clean".
 
-     Recipe as a string to be evaluated by the system
+Recipe as a string to be evaluated by the system
 
-     (: "foo.o" '("foo.c")
-       "cc -c foo.o")
+```scheme
+(: "foo.o" '("foo.c")
+  "cc -c foo.o")
+```
 
-     Recipe as a procedure
+Recipe as a procedure
 
-     (: "clean-foo" '()
-       (lambda ()
-         (delete-file "foo.o")))
+```scheme
+(: "clean-foo" '()
+  (lambda ()
+    (delete-file "foo.o")))
 
-     Recipe as a procedure that returns #f to indicate failure
+```
 
-     (: "recent" '()
-       (lambda ()
-         (if condition
-           #t
-           #f))))
+Recipe as a procedure that returns #f to indicate failure
 
-     Recipe as a procedure returning a string to be evaluated by the
-     system
+```scheme
+(: "recent" '()
+  (lambda ()
+    (if condition
+      #t
+      #f))))
+```
 
-     (: "foo.o" '("foo.c")
-       (lambda ()
-         (format #f "cc ~A -c foo.c" some-flags))
+Recipe as a procedure returning a string to be evaluated by the
+system
 
-     Recipe using recipe helper procedures, which create a string to
-     be evaluated by the system
+```scheme
+(: "foo.o" '("foo.c")
+  (lambda ()
+    (format #f "cc ~A -c foo.c" some-flags))
+```
 
-     (: "foo.c" '("foo.c")
-       (~ ($ CC) ($ CFLAGS) "-c" $<))
+Recipe using recipe helper procedures, which create a string to
+be evaluated by the system
 
-     Recipe as a boolean to indicate pass or failure without doing any
-     processing.  For example, the rule below tells Potato Make that
-     the file "foo.c" exists without actually testing for it.
+```scheme
+(: "foo.c" '("foo.c")
+  (~ ($ CC) ($ CFLAGS) "-c" $<))
+```
+
+Recipe as a boolean to indicate pass or failure without doing any
+processing.  For example, the rule below tells Potato Make that
+the file "foo.c" exists without actually testing for it.
+
+```scheme     
+(: "foo.c" '() #t)
+```
+
+If there is no recipe at all, it is shorthand for the recipe #t,
+indicating a recipe that always passes. This is used
+in prerequisite-only target rules, such as below, which passes
+so long as the prerequisites pass. These two rules are the same.
+
+```scheme
+(: "all" '("foo.exe"))
+(: "all" '("foo.exe") #t)
+```
      
-     (: "foo.c" '() #t)
+Lastly, if the recipe is #f, this target will always fail.
 
-     If there is no recipe at all, it is shorthand for the recipe #t,
-     indicating a recipe that always passes. This is used
-     in prerequisite-only target rules, such as below, which passes
-     so long as the prerequisites
-     pass. These two rules are the same.
-
-     (: "all" '("foo.exe"))
-     (: "all" '("foo.exe") #t)
-     
-     Lastly, if the recipe is #f, this target will always fail.
-     
-     (: "fail" '() #f)
+```scheme     
+(: "fail" '() #f)
+```
 
 The *suffix rule* is a generic rule to convert one source file to a
 target file, based on the filename extensions.
 
-     (-> ".c" ".o"
-       (~ ($ CC) ($ CFLAGS) "-c" $< "-o" $@))
+```scheme
+(-> ".c" ".o"
+  (~ ($ CC) ($ CFLAGS) "-c" $< "-o" $@))
+```
 
 ## Recipe Helpers
 
