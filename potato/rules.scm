@@ -904,11 +904,11 @@ This is where the magic happens."
             (begin
               (if (passed? node)
                   (when (>= %verbosity 2)
-                    (format #t "~A~a~A~a: ~Apass~A~%~!"
+                    (format #t "~A~a~A~a: ~APASS~A~%~!"
                             (node-depth-string node) (lquo) (node-get-name node) (rquo)
                             (green) (default)))
                   (when (>= %verbosity 2)
-                    (format #t "~A~a~A~a: ~Afail~A~%~!"
+                    (format #t "~A~a~A~a: ~AFAIL~A~%~!"
                             (node-depth-string node) (lquo) (node-get-name node) (rquo)
                             (red) (default))))
               (if (has-parent? node)
@@ -929,12 +929,12 @@ This is where the magic happens."
                               (lquo) (node-get-name node) (rquo)))
                     (if (passed? node)
                         (when (>= %verbosity 1)
-                          (format #t "~A~a~A~a: ~Acomplete~A~%~!"
+                          (format #t "~A~a~A~a: ~ACOMPLETE~A~%~!"
                                   (node-depth-string node)
                                   (lquo) (node-get-name node) (rquo)
                                   (green) (default)))
                         (when (>= %verbosity 1)
-                          (format #t "~A~a~A~a: ~Acomplete~A~%~!"
+                          (format #t "~A~a~A~a: ~ACOMPLETE~A~%~!"
                                   (node-depth-string node)
                                   (lquo) (node-get-name node) (rquo)
                                   (red) (default))))
