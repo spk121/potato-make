@@ -30,14 +30,18 @@ The rules go in between `initialize` and `build`.
 
     (use-modules (potato make))
     (initialize)
+
+    ;; Variables
     (:= CC "gcc")
     (:= CFLAGS "-g -O2")
     
+    ;; Rules
     (: "all" '("foo"))
     (: "foo" '("foo.o" "bar.o")
       (~ ($ CC) "-o" $@ $^))
     (-> ".c" ".o"
       (~ ($ CC) "-c" $<))
+
     (execute)
 
 ## Command-Line Arguments
