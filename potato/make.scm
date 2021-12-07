@@ -285,7 +285,7 @@ targets listed on the parsed command-line are used."
             #f)
           ;; else
           (begin
-            (print "The recipe for “~A” has succeeded.~%" target)
+            (print "The recipe “~A” finished successfully.~%" target)
             (if (not (null? rest))
                 (loop (car rest) (cdr rest))
 
