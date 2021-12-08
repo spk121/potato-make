@@ -46,6 +46,16 @@ exec guile -s "$0" "$@"
 (execute)
 ```
 
+## Installation
+
+There are multiple ways to install potato-make:
+
+A. Install from your distribution
+B. Clone this directory:
+    a) .. to your GNU Guile load directory (https://www.gnu.org/software/guile/manual/html_node/Load-Paths.html)
+    b) .. and set the environment variable `GUILE_LOAD_PATH` to the `path/to/the/cloned/directory`
+    c) .. and define `(add-to-load-path "path/to/the/cloned/directory")`
+
 ## Command-Line Arguments
 
 This boilerplate loads the library functions and it parses the
