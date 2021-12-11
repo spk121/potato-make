@@ -99,7 +99,7 @@
   (format #t "    -h, --help                     print help and exit~%")
   (format #t "    -v, --version               print version and exit~%")
   (format #t "    -V 0..3, --verbosity=0..3~%")
-  (format #t "           set output level from 0=silent to 3=verbose~%")                    
+  (format #t "           set output level from 0=silent to 3=verbose~%")
   (format #t "    -e, --environment        use environment variables~%")
   (format #t "    -E, --elevate-environment~%")
   (format #t "                     use environment variables and let~%")
