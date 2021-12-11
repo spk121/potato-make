@@ -1,6 +1,6 @@
 #+TITLE: Potato-Make
 
-Potato Make is a scheme library inspired by ~~make~~ utility in IEEE Std 1003.1-201& (POSIX) that aims to simplify the task of mtaintaing, updating and regeneration programs.
+Potato Make is a scheme library inspired by =make= utility in IEEE Std 1003.1-201& (POSIX) that aims to simplify the task of mtaintaing, updating and regeneration programs.
 
 With this library, you can write a build script in Guile Scheme.
 
@@ -25,7 +25,7 @@ Add this at the bottom of your build script
 (execute)
 #+END_SRC
 
-The rules and variables go in between ~~initialize~~ and ~~execute~~.
+The rules and variables go in between =initialize= and =execute=.
 
 ** Simple potato script
 
@@ -90,12 +90,12 @@ The command-line arguments are the following:
 
 ** MAKEVARS
 
-A hash table called ~~%makevars~~ has string keys.
+A hash table called =%makevars= has string keys.
 
-These procedures are syntax that add quotation marks around ~~key~~, so you call them without the quotes on
-~~key~~.
+These procedures are syntax that add quotation marks around =key=, so you call them without the quotes on
+=key=.
 
-The returned value of ~~$~~ is a string, or an empty string on failure.
+The returned value of =$= is a string, or an empty string on failure.
 
 You define makevars in the script, in the environment, or on the command line.
 
@@ -120,7 +120,7 @@ You define makevars in the script, in the environment, or on the command line.
 
 ** Rules
 
-The **target rule** is for when the target, and the prerequisites (if any) have filenames or phony names.
+The *target rule* is for when the target, and the prerequisites (if any) have filenames or phony names.
 
 #+BEGIN_SRC scheme-mode
 (: target-name '(prereq-name-1 prereq-name-2 ...)
@@ -129,7 +129,7 @@ The **target rule** is for when the target, and the prerequisites (if any) have 
    ...)
 #+END_SRC
 
-~~target-name~~ is a string which is either a filename to be created or an phony name like "all" or "clean".
+=target-name= is a string which is either a filename to be created or an phony name like "all" or "clean".
 
 Recipe as a string to be evaluated by the system
 
@@ -179,7 +179,7 @@ For example, the rule below tells Potato Make that the file "foo.c" exists witho
 (: "foo.c" '() #t)
 #+END_SRC
 
-If there is no recipe at all, it is shorthand for the recipe ~~#t~~, indicating a recipe that always passes.
+If there is no recipe at all, it is shorthand for the recipe =#t=, indicating a recipe that always passes.
 
 This is used in prerequisite-only target rules, such as below, which passes so long as the prerequisites pass. These two rules are the same.
 
@@ -188,7 +188,7 @@ This is used in prerequisite-only target rules, such as below, which passes so l
 (: "all" '("foo.exe") #t)
 #+END_SRC
 
-Lastly, if the recipe is ~~#f~~, this target will always fail.
+Lastly, if the recipe is =#f=, this target will always fail.
 
 #+BEGIN_SRC scheme-mode
 (: "fail" '() #f)
@@ -211,7 +211,7 @@ The **suffix rule** is a generic rule to convert one source file to a target fil
      - `%makevar` hash-table references
      - automatic variables
      - anything whose string representation as created by
-       ~~(format #f "~A" ...)~~ make sense
+       =(format #f "~A" ...)= make sense
 
      Any procedures are applied lazily, when the rule is executed.
 
@@ -220,24 +220,24 @@ The **suffix rule** is a generic rule to convert one source file to a target fil
      #+END_SRC
 
      Three versions of `~` with special effects
-     ~~(~- ...)~~   ignores any errors
-     ~~(~@ ...)~~   doesn't print recipe to console
-     ~~(~+ ...)~~   runs even when ~~--no-execute~~ was chosen
+     =(~- ...)=   ignores any errors
+     =(~@ ...)=   doesn't print recipe to console
+     =(~+ ...)=   runs even when =--no-execute= was chosen
 
 ** Automatic Variables
 
      Recipes can contain the following automatic variables
 
-     ~~$@~~    the target
-     ~~$*~~    the target w/o a filename suffix
-     ~~$<~~    the first prerequisite
-     ~~$^~~    the prerequisites, as a single space-separated string
-     ~~$$^~~   the prerequisites, as a scheme list of strings
-     ~~$?~~    the prerequisites that are files newer than the target file as a single space-separated string
-     ~~$$?~~   the prerequisites that are files newer than the target file as a scheme list of strings
+     =$@=    the target
+     =$*=    the target w/o a filename suffix
+     =$<=    the first prerequisite
+     =$^=    the prerequisites, as a single space-separated string
+     =$$^=   the prerequisites, as a scheme list of strings
+     =$?=    the prerequisites that are files newer than the target file as a single space-separated string
+     =$$?=   the prerequisites that are files newer than the target file as a scheme list of strings
 
 ** POSIX Makefile Parser
 
      Recipes can contain the following parser function
 
-     ~~(parse ...)~~ reads a standard Makefile and creates rules based on its contents.
+     =(parse ...)= reads a standard Makefile and creates rules based on its contents.
