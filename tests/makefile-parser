@@ -1,0 +1,167 @@
+#!/usr/bin/env sh
+exec guile -L . -s "$0" "$@"
+!#
+(use-modules (potato makefile-parser)
+             (srfi srfi-64)
+             (ice-9 textual-ports))
+
+(test-begin "makefile-parser")
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; Test parse-makefile-line function
+
+(test-equal "parse blank line"
+  '(blank . #f)
+  (parse-makefile-line "" #f))
+
+(test-equal "parse comment line"
+  '(comment . "# This is a comment")
+  (parse-makefile-line "# This is a comment" #f))
+
+(test-equal "parse variable assignment"
+  '(variable . ("CC" . "gcc"))
+  (parse-makefile-line "CC = gcc" #f))
+
+(test-equal "parse variable assignment with spaces"
+  '(variable . ("CFLAGS" . "-g -O2"))
+  (parse-makefile-line "CFLAGS = -g -O2" #f))
+
+(test-equal "parse target rule without prerequisites"
+  '(target-rule . ("all"))
+  (parse-makefile-line "all:" #f))
+
+(test-equal "parse target rule with one prerequisite"
+  '(target-rule . ("foo" "bar"))
+  (parse-makefile-line "foo: bar" #f))
+
+(test-equal "parse target rule with multiple prerequisites"
+  '(target-rule . ("foo" "bar" "baz"))
+  (parse-makefile-line "foo: bar baz" #f))
+
+(test-equal "parse recipe line"
+  '(recipe . "echo hello")
+  (parse-makefile-line "\techo hello" #f))
+
+(test-equal "parse suffix rule"
+  '(suffix-rule . ".c.o")
+  (parse-makefile-line ".c.o:" #f))
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; Test parse-suffix-rule function
+
+(test-equal "parse .c.o suffix rule"
+  '(".c" . ".o")
+  (parse-suffix-rule ".c.o"))
+
+(test-equal "parse .cpp.o suffix rule"
+  '(".cpp" . ".o")
+  (parse-suffix-rule ".cpp.o"))
+
+(test-equal "parse .c.obj suffix rule"
+  '(".c" . ".obj")
+  (parse-suffix-rule ".c.obj"))
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; Test parse-makefile with a simple makefile
+
+(test-assert "parse simple makefile"
+  (let* ((test-makefile "tests/test.mk")
+         (elements (parse-makefile test-makefile)))
+    (and (list? elements)
+         (> (length elements) 0))))
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; Test makefile->potato-make conversion
+
+(test-assert "convert makefile to potato-make"
+  (let ((output (makefile->potato-make "tests/test.mk")))
+    (and (string? output)
+         (string-contains output "(use-modules (potato make))")
+         (string-contains output "(initialize)")
+         (string-contains output "(execute)"))))
+
+(test-assert "converted makefile contains variable assignments"
+  (let ((output (makefile->potato-make "tests/test.mk")))
+    (and (string-contains output "(:= CC")
+         (string-contains output "(:= CFLAGS"))))
+
+(test-assert "converted makefile contains target rules"
+  (let ((output (makefile->potato-make "tests/test.mk")))
+    (and (string-contains output "(: \"all\"")
+         (string-contains output "(: \"foo\""))))
+
+(test-assert "converted makefile contains suffix rules"
+  (let ((output (makefile->potato-make "tests/test.mk")))
+    (string-contains output "(-> \".c\" \".o\"")))
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; Test with a makefile in memory
+
+(define test-makefile-content
+  "# Test makefile
+VAR1 = value1
+
+target1: prereq1
+\tcommand1
+
+.ext1.ext2:
+\tcommand2
+")
+
+(test-assert "parse makefile from string"
+  (call-with-input-string test-makefile-content
+    (lambda (port)
+      (let ((elements (parse-makefile-from-port port)))
+        (and (list? elements)
+             (> (length elements) 0))))))
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; Test edge cases
+
+(test-equal "parse target with no prerequisites and no colon space"
+  '(target-rule . ("target"))
+  (parse-makefile-line "target:" #f))
+
+(test-equal "parse variable with empty value"
+  '(variable . ("VAR" . ""))
+  (parse-makefile-line "VAR = " #f))
+
+(test-equal "parse recipe with make variable"
+  '(recipe . "$(CC) -o $@ $<")
+  (parse-makefile-line "\t$(CC) -o $@ $<" #f))
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; Test variable references in values and prerequisites
+
+(test-equal "parse variable with variable reference in value"
+  '(variable . ("CXXFLAGS" . "$(CFLAGS) -std=c++11"))
+  (parse-makefile-line "CXXFLAGS = $(CFLAGS) -std=c++11" #f))
+
+(test-equal "parse target with variable reference in prerequisites"
+  '(target-rule . ("myapp" "$(OBJS)"))
+  (parse-makefile-line "myapp: $(OBJS)" #f))
+
+(test-equal "parse := assignment operator"
+  '(variable . ("VAR" . "value"))
+  (parse-makefile-line "VAR := value" #f))
+
+(test-equal "parse ?= assignment operator"
+  '(variable . ("VAR" . "value"))
+  (parse-makefile-line "VAR ?= value" #f))
+
+(test-equal "parse += assignment operator"
+  '(variable . ("VAR" . "value"))
+  (parse-makefile-line "VAR += value" #f))
+
+(test-assert "converted makefile handles variable references"
+  (let ((output (makefile->potato-make "tests/complex.mk")))
+    (and (string-contains output "(:= CXXFLAGS")
+         (string-contains output "$(CFLAGS)"))))
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+(test-end "makefile-parser")
+
+;; Local Variables:
+;; mode: scheme
+;; End:

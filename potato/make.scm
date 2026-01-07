@@ -9,6 +9,7 @@
   #:use-module (potato makevars)
   #:use-module (potato rules)
   #:use-module (potato text)
+  #:use-module (potato makefile-parser)
   #:export (initialize
             execute)
   #:re-export (%suffix-rules
@@ -28,7 +29,9 @@
                always-execute-compose ~+
                ignore-error-compose ~-
                install-alternate-system-driver
-                              ))
+               parse-makefile
+               makefile->potato-make
+               ))
 
 (define %version "1.0")
 (define %debug-argv0 #f)
