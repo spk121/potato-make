@@ -1,0 +1,187 @@
+%%%% Starting test makefile-parser
+Group begin: makefile-parser
+Test begin:
+  test-name: "parse blank line"
+  source-file: "tests/makefile-parser"
+  source-line: 13
+  source-form: (test-equal "parse blank line" (quote (blank . #f)) (parse-makefile-line "" #f))
+Test end:
+  result-kind: pass
+  actual-value: (blank . #f)
+  expected-value: (blank . #f)
+Test begin:
+  test-name: "parse comment line"
+  source-file: "tests/makefile-parser"
+  source-line: 17
+  source-form: (test-equal "parse comment line" (quote (comment . "# This is a comment")) (parse-makefile-line "# This is a comment" #f))
+Test end:
+  result-kind: pass
+  actual-value: (comment . "# This is a comment")
+  expected-value: (comment . "# This is a comment")
+Test begin:
+  test-name: "parse variable assignment"
+  source-file: "tests/makefile-parser"
+  source-line: 21
+  source-form: (test-equal "parse variable assignment" (quote (variable "CC" . "gcc")) (parse-makefile-line "CC = gcc" #f))
+Test end:
+  result-kind: pass
+  actual-value: (variable "CC" . "gcc")
+  expected-value: (variable "CC" . "gcc")
+Test begin:
+  test-name: "parse variable assignment with spaces"
+  source-file: "tests/makefile-parser"
+  source-line: 25
+  source-form: (test-equal "parse variable assignment with spaces" (quote (variable "CFLAGS" . "-g -O2")) (parse-makefile-line "CFLAGS = -g -O2" #f))
+Test end:
+  result-kind: pass
+  actual-value: (variable "CFLAGS" . "-g -O2")
+  expected-value: (variable "CFLAGS" . "-g -O2")
+Test begin:
+  test-name: "parse target rule without prerequisites"
+  source-file: "tests/makefile-parser"
+  source-line: 29
+  source-form: (test-equal "parse target rule without prerequisites" (quote (target-rule "all")) (parse-makefile-line "all:" #f))
+Test end:
+  result-kind: pass
+  actual-value: (target-rule "all")
+  expected-value: (target-rule "all")
+Test begin:
+  test-name: "parse target rule with one prerequisite"
+  source-file: "tests/makefile-parser"
+  source-line: 33
+  source-form: (test-equal "parse target rule with one prerequisite" (quote (target-rule "foo" "bar")) (parse-makefile-line "foo: bar" #f))
+Test end:
+  result-kind: pass
+  actual-value: (target-rule "foo" "bar")
+  expected-value: (target-rule "foo" "bar")
+Test begin:
+  test-name: "parse target rule with multiple prerequisites"
+  source-file: "tests/makefile-parser"
+  source-line: 37
+  source-form: (test-equal "parse target rule with multiple prerequisites" (quote (target-rule "foo" "bar" "baz")) (parse-makefile-line "foo: bar baz" #f))
+Test end:
+  result-kind: pass
+  actual-value: (target-rule "foo" "bar" "baz")
+  expected-value: (target-rule "foo" "bar" "baz")
+Test begin:
+  test-name: "parse recipe line"
+  source-file: "tests/makefile-parser"
+  source-line: 41
+  source-form: (test-equal "parse recipe line" (quote (recipe . "echo hello")) (parse-makefile-line "\techo hello" #f))
+Test end:
+  result-kind: pass
+  actual-value: (recipe . "echo hello")
+  expected-value: (recipe . "echo hello")
+Test begin:
+  test-name: "parse suffix rule"
+  source-file: "tests/makefile-parser"
+  source-line: 45
+  source-form: (test-equal "parse suffix rule" (quote (suffix-rule . ".c.o")) (parse-makefile-line ".c.o:" #f))
+Test end:
+  result-kind: pass
+  actual-value: (suffix-rule . ".c.o")
+  expected-value: (suffix-rule . ".c.o")
+Test begin:
+  test-name: "parse .c.o suffix rule"
+  source-file: "tests/makefile-parser"
+  source-line: 52
+  source-form: (test-equal "parse .c.o suffix rule" (quote (".c" . ".o")) (parse-suffix-rule ".c.o"))
+Test end:
+  result-kind: pass
+  actual-value: (".c" . ".o")
+  expected-value: (".c" . ".o")
+Test begin:
+  test-name: "parse .cpp.o suffix rule"
+  source-file: "tests/makefile-parser"
+  source-line: 56
+  source-form: (test-equal "parse .cpp.o suffix rule" (quote (".cpp" . ".o")) (parse-suffix-rule ".cpp.o"))
+Test end:
+  result-kind: pass
+  actual-value: (".cpp" . ".o")
+  expected-value: (".cpp" . ".o")
+Test begin:
+  test-name: "parse .c.obj suffix rule"
+  source-file: "tests/makefile-parser"
+  source-line: 60
+  source-form: (test-equal "parse .c.obj suffix rule" (quote (".c" . ".obj")) (parse-suffix-rule ".c.obj"))
+Test end:
+  result-kind: pass
+  actual-value: (".c" . ".obj")
+  expected-value: (".c" . ".obj")
+Test begin:
+  test-name: "parse simple makefile"
+  source-file: "tests/makefile-parser"
+  source-line: 67
+  source-form: (test-assert "parse simple makefile" (let* ((test-makefile "tests/test.mk") (elements (parse-makefile test-makefile))) (and (list? elements) (> (length elements) 0))))
+Test end:
+  result-kind: pass
+  actual-value: #t
+Test begin:
+  test-name: "convert makefile to potato-make"
+  source-file: "tests/makefile-parser"
+  source-line: 76
+  source-form: (test-assert "convert makefile to potato-make" (let ((output (makefile->potato-make "tests/test.mk"))) (and (string? output) (string-contains output "(use-modules (potato make))") (string-contains output "(initialize)") (string-contains output "(execute)"))))
+Test end:
+  result-kind: pass
+  actual-value: 308
+Test begin:
+  test-name: "converted makefile contains variable assignments"
+  source-file: "tests/makefile-parser"
+  source-line: 83
+  source-form: (test-assert "converted makefile contains variable assignments" (let ((output (makefile->potato-make "tests/test.mk"))) (and (string-contains output "(:= CC") (string-contains output "(:= CFLAGS"))))
+Test end:
+  result-kind: pass
+  actual-value: 125
+Test begin:
+  test-name: "converted makefile contains target rules"
+  source-file: "tests/makefile-parser"
+  source-line: 88
+  source-form: (test-assert "converted makefile contains target rules" (let ((output (makefile->potato-make "tests/test.mk"))) (and (string-contains output "(: \"all\"") (string-contains output "(: \"foo\""))))
+Test end:
+  result-kind: pass
+  actual-value: 170
+Test begin:
+  test-name: "converted makefile contains suffix rules"
+  source-file: "tests/makefile-parser"
+  source-line: 93
+  source-form: (test-assert "converted makefile contains suffix rules" (let ((output (makefile->potato-make "tests/test.mk"))) (string-contains output "(-> \".c\" \".o\"")))
+Test end:
+  result-kind: pass
+  actual-value: 221
+Test begin:
+  test-name: "parse makefile from string"
+  source-file: "tests/makefile-parser"
+  source-line: 111
+  source-form: (test-assert "parse makefile from string" (call-with-input-string test-makefile-content (lambda (port) (let ((elements (parse-makefile-from-port port))) (and (list? elements) (> (length elements) 0))))))
+Test end:
+  result-kind: pass
+  actual-value: #t
+Test begin:
+  test-name: "parse target with no prerequisites and no colon space"
+  source-file: "tests/makefile-parser"
+  source-line: 121
+  source-form: (test-equal "parse target with no prerequisites and no colon space" (quote (target-rule "target")) (parse-makefile-line "target:" #f))
+Test end:
+  result-kind: pass
+  actual-value: (target-rule "target")
+  expected-value: (target-rule "target")
+Test begin:
+  test-name: "parse variable with empty value"
+  source-file: "tests/makefile-parser"
+  source-line: 125
+  source-form: (test-equal "parse variable with empty value" (quote (variable "VAR" . "")) (parse-makefile-line "VAR = " #f))
+Test end:
+  result-kind: pass
+  actual-value: (variable "VAR" . "")
+  expected-value: (variable "VAR" . "")
+Test begin:
+  test-name: "parse recipe with make variable"
+  source-file: "tests/makefile-parser"
+  source-line: 129
+  source-form: (test-equal "parse recipe with make variable" (quote (recipe . "$(CC) -o $@ $<")) (parse-makefile-line "\t$(CC) -o $@ $<" #f))
+Test end:
+  result-kind: pass
+  actual-value: (recipe . "$(CC) -o $@ $<")
+  expected-value: (recipe . "$(CC) -o $@ $<")
+Group end: makefile-parser
+# of expected passes      21

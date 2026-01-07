@@ -5,10 +5,10 @@ CFLAGS = -g -O2
 all: foo
 
 foo: foo.o bar.o
-$(CC) -o $@ $^
+	$(CC) -o $@ $^
 
 .c.o:
-$(CC) $(CFLAGS) -c $<
+	$(CC) $(CFLAGS) -c $<
 
 clean:
-rm -f foo foo.o bar.o
+	rm -f foo foo.o bar.o
