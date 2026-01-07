@@ -235,9 +235,55 @@ target file, based on the filename extensions.
      $$?   the prerequisites that are files newer than the target file
            as a scheme list of strings
 
-## POSIX Makefile Parser
+## POSIX Makefile to Potato Make Converter
 
-     Recipes can contain the following parser function
+Potato Make includes a parser that can convert POSIX makefiles to potato-make scripts.
 
-     (parse ...) reads a standard Makefile and creates
-     rules based on its contents.
+### Using the converter utility
+
+The `makefile2potato` utility converts POSIX Makefiles to potato-make scripts:
+
+```bash
+# Convert to stdout
+./makefile2potato Makefile
+
+# Convert to a file
+./makefile2potato -o build.scm Makefile
+
+# Make executable and run
+chmod +x build.scm
+./build.scm
+```
+
+### Using the parser in Scheme code
+
+You can also use the parser programmatically:
+
+```scheme
+(use-modules (potato makefile-parser))
+
+;; Parse a makefile and get structured data
+(define elements (parse-makefile "Makefile"))
+
+;; Convert a makefile to potato-make code
+(define code (makefile->potato-make "Makefile"))
+(display code)
+```
+
+### Supported Makefile features
+
+The parser supports:
+- Variable assignments (e.g., `CC = gcc`, `CFLAGS = -g -O2`)
+- Target rules with prerequisites and recipes
+- Suffix rules (e.g., `.c.o:`)
+- Comments (lines starting with `#`)
+- Recipe lines (indented with tabs)
+- Make variable references (e.g., `$(CC)` → `($ CC)`)
+- Automatic variables (`$@`, `$<`, `$^`, etc.)
+
+### Limitations
+
+- The parser does not expand variable references in prerequisites
+- `.PHONY` is treated as a regular target
+- Advanced GNU Make features (conditionals, functions, etc.) are not supported
+- Line continuations with backslash are partially supported

@@ -148,6 +148,21 @@
   "Parse a POSIX makefile from a file and return parsed elements."
   (call-with-input-file filename parse-makefile-from-port))
 
+;; Convert a make recipe string to potato-make DSL
+(define (convert-recipe-to-potato-make recipe)
+  "Convert a POSIX make recipe to potato-make DSL.
+   Converts $(VAR) to ($ VAR) and automatic variables like $@ to $@ DSL."
+  ;; For simple cases, we'll keep recipes as strings
+  ;; More complex conversion could parse and reconstruct using ~ syntax
+  ;; This is a basic implementation
+  (let ((converted recipe))
+    ;; Convert $(VAR) to ($ VAR) references
+    (set! converted (regexp-substitute/global #f "\\$\\(([A-Za-z_][A-Za-z0-9_]*)\\)" 
+                                               converted
+                                               'pre "($ " 1 ")" 'post))
+    ;; For now, keep automatic variables as-is since they work in potato-make
+    converted))
+
 ;; Convert parsed elements to potato-make code
 (define (elements->potato-make elements)
   "Convert parsed makefile elements to potato-make Scheme code as a string."
@@ -184,13 +199,18 @@
                 (target (car rule-data))
                 (prereqs (cdr rule-data))
                 (recipes (cdr element)))
-           (format output "(: ~s '(~a)\n" target 
+           (format output "(: ~s '(~a)" target 
                    (string-join (map (lambda (p) (format #f "~s" p)) prereqs) " "))
-           (for-each
-            (lambda (recipe)
-              (format output "  ~s\n" recipe))
-            recipes)
-           (display ")\n\n" output)))
+           (if (null? recipes)
+               (display ")\n\n" output)
+               (begin
+                 (display "\n" output)
+                 (for-each
+                  (lambda (recipe)
+                    (let ((converted (convert-recipe-to-potato-make recipe)))
+                      (format output "  (~~ ~s)\n" converted)))
+                  recipes)
+                 (display ")\n\n" output)))))
         
         ;; Suffix rule with recipes
         ((and (pair? element) (pair? (car element))
@@ -204,7 +224,8 @@
                (format output "(-> ~s ~s\n" src-ext tgt-ext)
                (for-each
                 (lambda (recipe)
-                  (format output "  ~s\n" recipe))
+                  (let ((converted (convert-recipe-to-potato-make recipe)))
+                    (format output "  (~~ ~s)\n" converted)))
                 recipes)
                (display ")\n\n" output)))))))
      elements)
