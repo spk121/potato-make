@@ -46,8 +46,15 @@ exec guile -L . -s "$0" "$@"
           (lambda ()
             (let ((converted (makefile->potato-make input-file)))
               (if output-file
-                  (with-output-to-file output-file
-                    (lambda () (display converted)))
+                  (begin
+                    ;; Check if file exists and error if so
+                    (when (file-exists? output-file)
+                      (format (current-error-port) 
+                              "Error: Output file '~a' already exists. Remove it first or use a different name.~%" 
+                              output-file)
+                      (exit 1))
+                    (with-output-to-file output-file
+                      (lambda () (display converted))))
                   (display converted))))
           (lambda (key . args)
             (format (current-error-port) "Error: ~a\n" 

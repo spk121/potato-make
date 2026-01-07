@@ -131,6 +131,34 @@ target1: prereq1
   (parse-makefile-line "\t$(CC) -o $@ $<" #f))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; Test variable references in values and prerequisites
+
+(test-equal "parse variable with variable reference in value"
+  '(variable . ("CXXFLAGS" . "$(CFLAGS) -std=c++11"))
+  (parse-makefile-line "CXXFLAGS = $(CFLAGS) -std=c++11" #f))
+
+(test-equal "parse target with variable reference in prerequisites"
+  '(target-rule . ("myapp" "$(OBJS)"))
+  (parse-makefile-line "myapp: $(OBJS)" #f))
+
+(test-equal "parse := assignment operator"
+  '(variable . ("VAR" . "value"))
+  (parse-makefile-line "VAR := value" #f))
+
+(test-equal "parse ?= assignment operator"
+  '(variable . ("VAR" . "value"))
+  (parse-makefile-line "VAR ?= value" #f))
+
+(test-equal "parse += assignment operator"
+  '(variable . ("VAR" . "value"))
+  (parse-makefile-line "VAR += value" #f))
+
+(test-assert "converted makefile handles variable references"
+  (let ((output (makefile->potato-make "tests/complex.mk")))
+    (and (string-contains output "(:= CXXFLAGS")
+         (string-contains output "$(CFLAGS)"))))
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
 (test-end "makefile-parser")
 

@@ -2,7 +2,6 @@
   #:use-module (srfi srfi-1)
   #:use-module (ice-9 rdelim)
   #:use-module (ice-9 regex)
-  #:use-module (potato parse-lib)
   #:export (parse-makefile
             makefile->potato-make
             parse-makefile-line
@@ -30,13 +29,40 @@
          (char=? (string-ref line 0) #\tab))
     (cons 'recipe (string-trim-right (substring line 1))))
    
-   ;; Variable assignment (contains = but not :)
+   ;; Variable assignment - check for =, :=, ?=, += operators
+   ;; Must check this before target rules to handle := correctly
    ((and (string-index line #\=)
          (not continuation?))
-    (let* ((parts (string-split-on-first line #\=))
-           (var-name (string-trim-both (car parts)))
-           (var-value (string-trim-both (cadr parts))))
-      (cons 'variable (cons var-name var-value))))
+    (let* ((eq-pos (string-index line #\=))
+           (colon-pos (string-index line #\:))
+           (lhs-raw (substring line 0 eq-pos))
+           (rhs-raw (substring line (+ eq-pos 1)))
+           (lhs-trimmed (string-trim-right lhs-raw))
+           (lhs-len (string-length lhs-trimmed))
+           (op-char (and (> lhs-len 0)
+                         (string-ref lhs-trimmed (- lhs-len 1))))
+           ;; Check for :=, ?=, += operators (colon/question/plus immediately before =)
+           (is-special-op? (and op-char
+                                (or (char=? op-char #\:)
+                                    (char=? op-char #\?)
+                                    (char=? op-char #\+))))
+           ;; Determine if this is a variable assignment:
+           ;; - If it's a special operator (:=, ?=, +=), it's always a variable
+           ;; - If there's no colon, it's a variable
+           ;; - If = comes before : (and not special op), it's a variable assignment
+           ;; - If : comes before = (and not special op), it's a target rule like "target: prereq=$(VAR)"
+           (is-var-assignment? (or is-special-op?
+                                   (not colon-pos)
+                                   (< eq-pos colon-pos))))
+      (if is-var-assignment?
+          (let* ((var-name-raw (if is-special-op?
+                                   (substring lhs-trimmed 0 (- lhs-len 1))
+                                   lhs-trimmed))
+                 (var-name (string-trim-both var-name-raw))
+                 (var-value (string-trim-both rhs-raw)))
+            (cons 'variable (cons var-name var-value)))
+          ;; Not a variable assignment - will be handled by target rule below
+          (cons 'unknown line))))
    
    ;; Suffix rule (.ext1.ext2:)
    ((is-suffix-rule? line)
@@ -68,8 +94,8 @@
               (dot-count (string-count before-colon #\.)))
          (= dot-count 2))))
 
-;; Split string on first occurrence of a character
-(define (string-split-on-first str ch)
+;; Helper function renamed for consistency with Guile conventions
+(define (string-split-first str ch)
   (let ((idx (string-index str ch)))
     (if idx
         (list (substring str 0 idx)
@@ -108,11 +134,33 @@
                                (substring line 0 (- (string-length line) 1))
                                (if (eof-object? next-line) "" next-line))))
           (let ((parsed (parse-makefile-line continued-line #t)))
-            (if current-rule
-                ;; If we're in a rule, this might be part of prerequisites
-                (loop elements current-rule current-recipes)
-                ;; Otherwise add as normal element
-                (loop (cons parsed elements) #f '())))))
+            ;; Process the parsed continuation line properly
+            (case (car parsed)
+              ((recipe)
+               ;; Recipe line - add to current rule's recipes
+               (if current-rule
+                   (loop elements current-rule (cons (cdr parsed) current-recipes))
+                   ;; Recipe without a rule - skip
+                   (loop elements #f '())))
+              
+              ((target-rule suffix-rule)
+               ;; New rule - save previous rule if any
+               (if current-rule
+                   (loop (cons (cons current-rule (reverse current-recipes)) elements)
+                         parsed '())
+                   (loop elements parsed '())))
+              
+              ((variable comment blank)
+               ;; Non-rule line - save any current rule first
+               (if current-rule
+                   (loop (cons (cons current-rule (reverse current-recipes))
+                              (cons parsed elements))
+                         #f '())
+                   (loop (cons parsed elements) #f '())))
+              
+              (else
+               ;; Unknown - skip
+               (loop elements current-rule current-recipes))))))
        
        (else
         (let ((parsed (parse-makefile-line line #f)))
@@ -156,8 +204,8 @@
   ;; More complex conversion could parse and reconstruct using ~ syntax
   ;; This is a basic implementation
   (let ((converted recipe))
-    ;; Convert $(VAR) to ($ VAR) references
-    (set! converted (regexp-substitute/global #f "\\$\\(([A-Za-z_][A-Za-z0-9_]*)\\)" 
+    ;; Convert $(VAR) to ($ VAR) references, allowing variable names starting with digits
+    (set! converted (regexp-substitute/global #f "\\$\\(([A-Za-z0-9_]+)\\)" 
                                                converted
                                                'pre "($ " 1 ")" 'post))
     ;; For now, keep automatic variables as-is since they work in potato-make
@@ -178,15 +226,34 @@
     (for-each
      (lambda (element)
        (cond
-        ;; Variable assignment
+        ;; Variable assignment - sanitize variable name to prevent code injection
         ((and (pair? element) (eq? (car element) 'variable))
-         (let ((var-name (cadr element))
-               (var-value (cddr element)))
-           (format output "(:= ~a ~s)\n" var-name var-value)))
+         (let* ((var-name-raw (cadr element))
+                (var-value (cddr element))
+                ;; Sanitize: only allow alphanumeric and underscore characters
+                (var-name (if (string-every (lambda (c) 
+                                              (or (char-alphabetic? c)
+                                                  (char-numeric? c)
+                                                  (char=? c #\_))) 
+                                            var-name-raw)
+                              var-name-raw
+                              (begin
+                                (format (current-error-port) 
+                                        "Warning: Skipping invalid variable name: ~s~%" 
+                                        var-name-raw)
+                                #f))))
+           (when var-name
+             (format output "(:= ~a ~s)\n" var-name var-value))))
         
-        ;; Comment
+        ;; Comment - convert # to ;; for proper Scheme syntax
         ((and (pair? element) (eq? (car element) 'comment))
-         (format output "~a\n" (cdr element)))
+         (let* ((raw (cdr element))
+                (text (if (and (string? raw)
+                               (> (string-length raw) 0)
+                               (char=? (string-ref raw 0) #\#))
+                          (substring raw 1 (string-length raw))
+                          raw)))
+           (format output ";;~a\n" text)))
         
         ;; Blank line
         ((and (pair? element) (eq? (car element) 'blank))
