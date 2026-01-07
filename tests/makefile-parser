@@ -27,7 +27,7 @@ exec guile -L . -s "$0" "$@"
   (parse-makefile-line "CFLAGS = -g -O2" #f))
 
 (test-equal "parse target rule without prerequisites"
-  '(target-rule . ("all" ))
+  '(target-rule . ("all"))
   (parse-makefile-line "all:" #f))
 
 (test-equal "parse target rule with one prerequisite"
