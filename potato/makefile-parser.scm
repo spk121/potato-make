@@ -15,6 +15,14 @@
   "Check if target is a special target (.POSIX, .PHONY, .IGNORE, .DEFAULT)"
   (member target '(".POSIX" ".PHONY" ".IGNORE" ".DEFAULT")))
 
+;; Validate .POSIX special target
+(define (validate-posix-target target prereqs first-non-comment-seen?)
+  "Validate that .POSIX appears as first non-comment line with no prerequisites"
+  (when (equal? target ".POSIX")
+    (unless (and (not first-non-comment-seen?)
+                 (null? prereqs))
+      (error "Error: .POSIX must be the first non-comment line with no prerequisites or commands"))))
+
 ;; Parse a line and identify its type
 (define (parse-makefile-line line continuation?)
   "Parse a single line and identify what type of makefile element it is.
@@ -150,12 +158,9 @@
                    (loop elements #f '() first-non-comment-seen?)))
               
               ((target-rule suffix-rule)
-               ;; Check for .POSIX special target validation
-               (when (and (eq? (car parsed) 'target-rule)
-                         (equal? (cadr parsed) ".POSIX"))
-                 (unless (and (not first-non-comment-seen?)
-                             (null? (cddr parsed)))  ;; No prerequisites
-                   (error "Error: .POSIX must be the first non-comment line with no prerequisites or commands")))
+               ;; Validate .POSIX if present
+               (when (eq? (car parsed) 'target-rule)
+                 (validate-posix-target (cadr parsed) (cddr parsed) first-non-comment-seen?))
                
                ;; New rule - save previous rule if any
                (if current-rule
@@ -187,12 +192,9 @@
                  (loop elements #f '() first-non-comment-seen?)))
             
             ((target-rule suffix-rule)
-             ;; Check for .POSIX special target validation
-             (when (and (eq? (car parsed) 'target-rule)
-                       (equal? (cadr parsed) ".POSIX"))
-               (unless (and (not first-non-comment-seen?)
-                           (null? (cddr parsed)))  ;; No prerequisites
-                 (error "Error: .POSIX must be the first non-comment line with no prerequisites or commands")))
+             ;; Validate .POSIX if present
+             (when (eq? (car parsed) 'target-rule)
+               (validate-posix-target (cadr parsed) (cddr parsed) first-non-comment-seen?))
              
              ;; New rule - save previous rule if any
              (if current-rule
@@ -273,8 +275,10 @@
             
             ;; .DEFAULT - validate and store default rule
             ((equal? target ".DEFAULT")
-             (when (or (not (null? prereqs)) (null? recipes))
-               (error "Error: .DEFAULT must have commands but no prerequisites"))
+             (when (not (null? prereqs))
+               (error "Error: .DEFAULT must not have prerequisites"))
+             (when (null? recipes)
+               (error "Error: .DEFAULT must have commands"))
              (set! default-rule recipes))))))
      elements)
     
