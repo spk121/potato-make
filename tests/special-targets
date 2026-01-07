@@ -28,7 +28,8 @@ exec guile -L . -s "$0" "$@"
          (string-contains output ";; clean is a phony target")
          (string-contains output ";; install is a phony target")
          (string-contains output ";; test is a phony target")
-         (not (string-contains output "(: \".PHONY\"")))))
+         ;; Should not have a .PHONY target rule in output
+         (not (string-contains output "\".PHONY\"")))))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; Test .IGNORE special target
@@ -38,7 +39,8 @@ exec guile -L . -s "$0" "$@"
     (and (string-contains output "(~~- \"rm -f prog main.o\")")
          (string-contains output ";; clean ignores command errors")
          (string-contains output ";; distclean ignores command errors")
-         (not (string-contains output "(: \".IGNORE\"")))))
+         ;; Should not have a .IGNORE target rule in output
+         (not (string-contains output "\".IGNORE\"")))))
 
 (test-assert ".IGNORE with no prerequisites makes all targets ignore errors"
   (let ((output (makefile->potato-make "tests/special-ignore.mk")))
@@ -55,7 +57,8 @@ exec guile -L . -s "$0" "$@"
     (and (string-contains output ";; .DEFAULT rule for targets without other rules")
          (string-contains output ";; In .DEFAULT, $< evaluates to the current target name")
          (string-contains output ";; DEFAULT RECIPE:")
-         (not (string-contains output "(: \".DEFAULT\"")))))
+         ;; Should not have a .DEFAULT target rule in output
+         (not (string-contains output "\".DEFAULT\"")))))
 
 (test-error ".DEFAULT with prerequisites should error"
   #t

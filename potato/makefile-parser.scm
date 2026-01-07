@@ -218,6 +218,10 @@
   "Parse a POSIX makefile from a file and return parsed elements."
   (call-with-input-file filename parse-makefile-from-port))
 
+;; Constants for recipe prefixes
+(define %ignore-error-prefix "~~-")
+(define %default-prefix "~~")
+
 ;; Convert a make recipe string to potato-make DSL
 (define (convert-recipe-to-potato-make recipe)
   "Convert a POSIX make recipe to potato-make DSL.
@@ -369,8 +373,8 @@
                       (let* ((converted (convert-recipe-to-potato-make recipe))
                              ;; Use ~- (ignore errors) if target is in ignore list or ignore-all
                              (recipe-prefix (if (ignore-errors-target? target ignore-targets ignore-all?)
-                                               "~~-"
-                                               "~~")))
+                                               %ignore-error-prefix
+                                               %default-prefix)))
                         (format output "  (~a ~s)\n" recipe-prefix converted)))
                     recipes)
                    (display ")\n\n" output))))))
