@@ -10,6 +10,11 @@
 
 ;; Parser for POSIX Makefiles that converts them to potato-make code
 
+;; Helper to check if target is a special target
+(define (special-target? target)
+  "Check if target is a special target (.POSIX, .PHONY, .IGNORE, .DEFAULT)"
+  (member target '(".POSIX" ".PHONY" ".IGNORE" ".DEFAULT")))
+
 ;; Parse a line and identify its type
 (define (parse-makefile-line line continuation?)
   "Parse a single line and identify what type of makefile element it is.
@@ -117,7 +122,8 @@
   "Parse a makefile from an input port and return a list of parsed elements."
   (let loop ((elements '())
              (current-rule #f)
-             (current-recipes '()))
+             (current-recipes '())
+             (first-non-comment-seen? #f))
     (let ((line (read-line port)))
       (cond
        ;; End of file
@@ -139,28 +145,36 @@
               ((recipe)
                ;; Recipe line - add to current rule's recipes
                (if current-rule
-                   (loop elements current-rule (cons (cdr parsed) current-recipes))
+                   (loop elements current-rule (cons (cdr parsed) current-recipes) first-non-comment-seen?)
                    ;; Recipe without a rule - skip
-                   (loop elements #f '())))
+                   (loop elements #f '() first-non-comment-seen?)))
               
               ((target-rule suffix-rule)
+               ;; Check for .POSIX special target validation
+               (when (and (eq? (car parsed) 'target-rule)
+                         (equal? (cadr parsed) ".POSIX"))
+                 (unless (and (not first-non-comment-seen?)
+                             (null? (cddr parsed)))  ;; No prerequisites
+                   (error "Error: .POSIX must be the first non-comment line with no prerequisites or commands")))
+               
                ;; New rule - save previous rule if any
                (if current-rule
                    (loop (cons (cons current-rule (reverse current-recipes)) elements)
-                         parsed '())
-                   (loop elements parsed '())))
+                         parsed '() #t)
+                   (loop elements parsed '() #t)))
               
               ((variable comment blank)
                ;; Non-rule line - save any current rule first
-               (if current-rule
-                   (loop (cons (cons current-rule (reverse current-recipes))
-                              (cons parsed elements))
-                         #f '())
-                   (loop (cons parsed elements) #f '())))
+               (let ((new-first-seen? (if (eq? (car parsed) 'variable) #t first-non-comment-seen?)))
+                 (if current-rule
+                     (loop (cons (cons current-rule (reverse current-recipes))
+                                (cons parsed elements))
+                           #f '() new-first-seen?)
+                     (loop (cons parsed elements) #f '() new-first-seen?))))
               
               (else
                ;; Unknown - skip
-               (loop elements current-rule current-recipes))))))
+               (loop elements current-rule current-recipes first-non-comment-seen?))))))
        
        (else
         (let ((parsed (parse-makefile-line line #f)))
@@ -168,28 +182,36 @@
             ((recipe)
              ;; Recipe line - add to current rule's recipes
              (if current-rule
-                 (loop elements current-rule (cons (cdr parsed) current-recipes))
+                 (loop elements current-rule (cons (cdr parsed) current-recipes) first-non-comment-seen?)
                  ;; Recipe without a rule - skip
-                 (loop elements #f '())))
+                 (loop elements #f '() first-non-comment-seen?)))
             
             ((target-rule suffix-rule)
+             ;; Check for .POSIX special target validation
+             (when (and (eq? (car parsed) 'target-rule)
+                       (equal? (cadr parsed) ".POSIX"))
+               (unless (and (not first-non-comment-seen?)
+                           (null? (cddr parsed)))  ;; No prerequisites
+                 (error "Error: .POSIX must be the first non-comment line with no prerequisites or commands")))
+             
              ;; New rule - save previous rule if any
              (if current-rule
                  (loop (cons (cons current-rule (reverse current-recipes)) elements)
-                       parsed '())
-                 (loop elements parsed '())))
+                       parsed '() #t)
+                 (loop elements parsed '() #t)))
             
             ((variable comment blank)
              ;; Non-rule line - save any current rule first
-             (if current-rule
-                 (loop (cons (cons current-rule (reverse current-recipes))
-                            (cons parsed elements))
-                       #f '())
-                 (loop (cons parsed elements) #f '())))
+             (let ((new-first-seen? (if (eq? (car parsed) 'variable) #t first-non-comment-seen?)))
+               (if current-rule
+                   (loop (cons (cons current-rule (reverse current-recipes))
+                              (cons parsed elements))
+                         #f '() new-first-seen?)
+                   (loop (cons parsed elements) #f '() new-first-seen?))))
             
             (else
              ;; Unknown - skip
-             (loop elements current-rule current-recipes)))))))))
+             (loop elements current-rule current-recipes first-non-comment-seen?)))))))))
 
 ;; Parse a makefile from a filename
 (define (parse-makefile filename)
@@ -211,10 +233,71 @@
     ;; For now, keep automatic variables as-is since they work in potato-make
     converted))
 
+;; Collect special targets from elements
+(define (collect-special-targets elements)
+  "Collect and organize special targets (.PHONY, .IGNORE, .DEFAULT) from parsed elements.
+   Returns an association list with keys: phony-targets, ignore-targets, default-rule"
+  (let ((phony-targets '())
+        (ignore-targets '())
+        (ignore-all? #f)
+        (default-rule #f))
+    
+    (for-each
+     (lambda (element)
+       (when (and (pair? element) (pair? (car element))
+                 (eq? (caar element) 'target-rule))
+         (let* ((rule-data (cdar element))
+                (target (car rule-data))
+                (prereqs (cdr rule-data))
+                (recipes (cdr element)))
+           
+           (cond
+            ;; .POSIX - already validated, just skip it
+            ((equal? target ".POSIX")
+             #t)
+            
+            ;; .PHONY - collect phony targets
+            ((equal? target ".PHONY")
+             (unless (null? prereqs)
+               (set! phony-targets (append phony-targets prereqs))))
+            
+            ;; .IGNORE - collect targets to ignore errors
+            ((equal? target ".IGNORE")
+             (if (null? prereqs)
+                 (set! ignore-all? #t)
+                 (set! ignore-targets (append ignore-targets prereqs))))
+            
+            ;; .DEFAULT - validate and store default rule
+            ((equal? target ".DEFAULT")
+             (when (or (not (null? prereqs)) (null? recipes))
+               (error "Error: .DEFAULT must have commands but no prerequisites"))
+             (set! default-rule recipes))))))
+     elements)
+    
+    (list (cons 'phony-targets phony-targets)
+          (cons 'ignore-targets ignore-targets)
+          (cons 'ignore-all? ignore-all?)
+          (cons 'default-rule default-rule))))
+
+;; Check if a target is in the phony list
+(define (phony-target? target phony-list)
+  (member target phony-list))
+
+;; Check if a target should ignore errors
+(define (ignore-errors-target? target ignore-list ignore-all?)
+  (or ignore-all? (member target ignore-list)))
+
 ;; Convert parsed elements to potato-make code
 (define (elements->potato-make elements)
   "Convert parsed makefile elements to potato-make Scheme code as a string."
-  (let ((output (open-output-string)))
+  (let ((output (open-output-string))
+        (special-info (collect-special-targets elements)))
+    
+    ;; Extract special target info
+    (let ((phony-targets (cdr (assq 'phony-targets special-info)))
+          (ignore-targets (cdr (assq 'ignore-targets special-info)))
+          (ignore-all? (cdr (assq 'ignore-all? special-info)))
+          (default-rule (cdr (assq 'default-rule special-info))))
     ;; Write header
     (display "#!/usr/bin/env sh\n" output)
     (display "exec guile -s \"$0\" \"$@\"\n" output)
@@ -266,18 +349,31 @@
                 (target (car rule-data))
                 (prereqs (cdr rule-data))
                 (recipes (cdr element)))
-           (format output "(: ~s '(~a)" target 
-                   (string-join (map (lambda (p) (format #f "~s" p)) prereqs) " "))
-           (if (null? recipes)
-               (display ")\n\n" output)
-               (begin
-                 (display "\n" output)
-                 (for-each
-                  (lambda (recipe)
-                    (let ((converted (convert-recipe-to-potato-make recipe)))
-                      (format output "  (~~ ~s)\n" converted)))
-                  recipes)
-                 (display ")\n\n" output)))))
+           
+           ;; Skip special targets - they are handled separately
+           (unless (special-target? target)
+             ;; Add comment annotations for phony and ignore targets
+             (when (phony-target? target phony-targets)
+               (format output ";; ~a is a phony target (always out-of-date)~%" target))
+             (when (ignore-errors-target? target ignore-targets ignore-all?)
+               (format output ";; ~a ignores command errors~%" target))
+             
+             (format output "(: ~s '(~a)" target 
+                     (string-join (map (lambda (p) (format #f "~s" p)) prereqs) " "))
+             (if (null? recipes)
+                 (display ")\n\n" output)
+                 (begin
+                   (display "\n" output)
+                   (for-each
+                    (lambda (recipe)
+                      (let* ((converted (convert-recipe-to-potato-make recipe))
+                             ;; Use ~- (ignore errors) if target is in ignore list or ignore-all
+                             (recipe-prefix (if (ignore-errors-target? target ignore-targets ignore-all?)
+                                               "~~-"
+                                               "~~")))
+                        (format output "  (~a ~s)\n" recipe-prefix converted)))
+                    recipes)
+                   (display ")\n\n" output))))))
         
         ;; Suffix rule with recipes
         ((and (pair? element) (pair? (car element))
@@ -297,9 +393,22 @@
                (display ")\n\n" output)))))))
      elements)
     
+      ;; Handle .DEFAULT rule if present
+      (when default-rule
+        (display ";; .DEFAULT rule for targets without other rules\n" output)
+        (display ";; In .DEFAULT, $< evaluates to the current target name\n" output)
+        (display ";; Note: potato-make doesn't directly support .DEFAULT\n" output)
+        (display ";; This is a placeholder comment for the .DEFAULT rule\n" output)
+        (for-each
+         (lambda (recipe)
+           (let ((converted (convert-recipe-to-potato-make recipe)))
+             (format output ";; DEFAULT RECIPE: ~a\n" converted)))
+         default-rule)
+        (display "\n" output))
+    
     ;; Write footer
     (display "(execute)\n" output)
-    (get-output-string output)))
+    (get-output-string output))))
 
 ;; Parse suffix rule string like ".c.o" into source and target extensions
 (define (parse-suffix-rule rule-str)
