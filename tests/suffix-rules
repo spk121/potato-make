@@ -84,4 +84,64 @@ exec guile -L . -s "$0" "$@"
     (execute)
     %cmd))
 
+(test-equal "Suffix rule maps different suffix lengths correctly."
+  "guild compile foo.scm"
+  (begin
+    (initialize '("test" "foo.go"))
+    (-> ".scm" ".go"
+        (~ "guild compile" $<))
+    (: "foo.scm" '() #t)
+    (execute)
+    %cmd))
+
+(test-equal "Suffix rule works when source has no extension."
+  "cc -c foo"
+  (begin
+    (initialize '("test" "foo.o"))
+    (-> "" ".o"
+        (~ "cc -c" $<))
+    (: "foo" '() #t)
+    (execute)
+    %cmd))
+
+(test-equal "Suffix rule works when target has no extension."
+  "cc -o foo foo.c"
+  (begin
+    (initialize '("test" "foo"))
+    (-> ".c" ""
+        (~ "cc -o" $@ $<))
+    (: "foo.c" '() #t)
+    (execute)
+    %cmd))
+
+(test-assert "Invalid suffix rule with same extension is ignored and warns."
+  (let ((err (open-output-string)))
+    (parameterize ((current-error-port err))
+      (initialize '("test" "foo.c"))
+      (-> ".c" ".c"
+          (~ "SHOULD-NOT-RUN" $<))
+      (set! %cmd #f)
+      (: "foo.c" '() #t)
+      (execute)
+      (and (null? %suffix-rules)
+           (not %cmd)
+           (string-contains
+            (get-output-string err)
+            "ignoring invalid suffix rule")))))
+
+(test-assert "Invalid empty suffix rule is ignored and warns."
+  (let ((err (open-output-string)))
+    (parameterize ((current-error-port err))
+      (initialize '("test" "foo"))
+      (-> "" ""
+          (~ "SHOULD-NOT-RUN" $<))
+      (set! %cmd #f)
+      (: "foo" '() #t)
+      (execute)
+      (and (null? %suffix-rules)
+           (not %cmd)
+           (string-contains
+            (get-output-string err)
+            "ignoring invalid suffix rule")))))
+
 (test-end "suffix_rules")

@@ -222,25 +222,33 @@ installs it as the system driver.  Returns the old system driver."
 
 (define (suffix-rule source target . recipes)
   "Register a suffix rule"
+  (if (and (string? source)
+           (string? target)
+           (string=? source target))
+      (format (current-error-port)
+              "Warning: ignoring invalid suffix rule ~s -> ~s (source and target suffix must differ).~%"
+              source target)
 
-  ;; FIXME: Typecheck
-  (when (>= %verbosity 3)
-    (format #t "Suffix rule: ~a~A~a ~A ~a~A~a~%~!"
-            (lquo) source (rquo) (right-arrow) (lquo) target (rquo)))
+      ;; else
+      (begin
+        ;; FIXME: Typecheck
+        (when (>= %verbosity 3)
+          (format #t "Suffix rule: ~a~A~a ~A ~a~A~a~%~!"
+                  (lquo) source (rquo) (right-arrow) (lquo) target (rquo)))
   
-  ;; If any recipes are raw strings, we need to make them into
-  ;; (cons 'default string)
-  (let ((recipes2
-         (map (lambda (recipe)
-                (cond
-                 ((pair? recipe)
-                  recipe)
-                 (else
-                  (cons 'default recipe))))
-              recipes)))
+        ;; If any recipes are raw strings, we need to make them into
+        ;; (cons 'default string)
+        (let ((recipes2
+               (map (lambda (recipe)
+                      (cond
+                       ((pair? recipe)
+                        recipe)
+                       (else
+                        (cons 'default recipe))))
+                    recipes)))
 
-    (let ((rule (make-suffix-rule source target recipes2 1)))
-      (set! %suffix-rules (cons rule %suffix-rules)))))
+          (let ((rule (make-suffix-rule source target recipes2 1)))
+            (set! %suffix-rules (cons rule %suffix-rules)))))))
 
 ;; Alias
 (define -> suffix-rule)
@@ -785,9 +793,10 @@ file exists."
              (node-set-rules! node (cons rule (node-get-rules node)))
              (node-set-rule-type! node 'suffix)
              (let* ((src (suffix-rule-get-source rule))
+                    (targ-len (string-length targ))
                     (prereq
                      (string-append
-                      (string-drop-right name (string-length src))
+                      (string-drop-right name targ-len)
                       src)))
 
                ;; Note the recursion here.
