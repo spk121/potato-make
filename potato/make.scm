@@ -10,7 +10,8 @@
   #:use-module (potato rules)
   #:use-module (potato text)
   #:export (initialize
-            execute)
+            execute
+            register-extension!)
   #:re-export (%suffix-rules
                lazy-assign    ?=
                assign         :=
@@ -33,6 +34,10 @@
 
 (define %version "1.0")
 (define %debug-argv0 #f)
+(define %registered-extension-ids '())
+(define %extension-option-spec '())
+(define %extension-help-lines '())
+(define %extension-init-hooks '())
 
 ;; #:re-export (
 ;;              lazy-assign ?=
@@ -95,6 +100,27 @@
     (strict            (single-char #\S) (value #f))
     ))
 
+    (define* (register-extension! #:key
+              id
+              (option-spec '())
+              (help-lines '())
+              (init-hook #f))
+      "Register an optional initialize/help extension.
+    ID must be unique; duplicate IDs are ignored."
+      (when (not (member id %registered-extension-ids))
+        (set! %registered-extension-ids
+          (cons id %registered-extension-ids))
+        (set! %extension-option-spec
+          (append %extension-option-spec option-spec))
+        (set! %extension-help-lines
+          (append %extension-help-lines help-lines))
+        (when (procedure? init-hook)
+      (set! %extension-init-hooks
+        (append %extension-init-hooks (list init-hook))))))
+
+    (define (all-option-spec)
+      (append option-spec %extension-option-spec))
+
 (define (display-help-and-exit argv0)
   (format #t "~A [-hvqVeEbn] [KEY=VALUE ...] [targets ...]~%" argv0)
   (format #t "    -h, --help                     print help and exit~%")
@@ -117,6 +143,10 @@
   (format #t "                       ASCII only output and no colors~%")
   (format #t "    -S, --strict~%")
   (format #t "                causes some behaviours to throw errors~%")
+  (for-each
+   (lambda (line)
+     (format #t "~a~%" line))
+   %extension-help-lines)
   (exit 0))
 
 (define (display-version-and-exit argv0)
@@ -166,7 +196,7 @@ arguments."
     (set! arguments (list (car (program-arguments)))))
 
   ;; We start of with the --help and --version command-line arguments.
-  (let ((options (getopt-long arguments option-spec))
+  (let ((options (getopt-long arguments (all-option-spec)))
         (%opt-builtins #f)
         (%opt-environment #f)
         (%opt-elevate-environment #f)
@@ -241,6 +271,10 @@ arguments."
                            %opt-strict
                            %verbosity
                            %opt-ascii)
+      (for-each
+       (lambda (hook)
+         (hook options))
+       %extension-init-hooks)
       ;; The remaining command-line words are the build targets that
       ;; we're going to tackle.
       (set! %targets (parse-targets extra))

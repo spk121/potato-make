@@ -50,4 +50,19 @@ exec guile -L . -s "$0" "$@"
      (cons "htmldir" (reference "htmldir" #f))
      (cons "man2dir" (reference "man2dir" #f)))))
 
+(test-equal "Importing (potato configure) decorates initialize with --prefix and related long options."
+  '(("prefix" . "/opt/pkg")
+    ("exec_prefix" . "/opt/pkg/exec")
+    ("bindir" . "/opt/pkg/exec/bin")
+    ("mandir" . "/opt/pkg/share/man")
+    ("srcdir" . "/tmp/src"))
+  (begin
+    (initialize '("test" "--prefix=/opt/pkg" "--exec-prefix=/opt/pkg/exec" "--srcdir=/tmp/src"))
+    (list
+     (cons "prefix" (reference "prefix" #f))
+     (cons "exec_prefix" (reference "exec_prefix" #f))
+     (cons "bindir" (reference "bindir" #f))
+     (cons "mandir" (reference "mandir" #f))
+     (cons "srcdir" (reference "srcdir" #f)))))
+
 (test-end "configure")

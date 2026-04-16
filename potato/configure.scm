@@ -1,8 +1,51 @@
 (define-module (potato configure)
   #:use-module (ice-9 format)
   #:use-module (ice-9 optargs)
+        #:use-module (ice-9 getopt-long)
+        #:use-module (potato make)
   #:use-module (potato makevars)
   #:export (add-directory-variables))
+
+(define %configure-option-spec
+        '((prefix (value #t))
+                (exec-prefix (value #t))
+                (bindir (value #t))
+                (sbindir (value #t))
+                (libexecdir (value #t))
+                (datarootdir (value #t))
+                (datadir (value #t))
+                (sysconfdir (value #t))
+                (sharedstatedir (value #t))
+                (localstatedir (value #t))
+                (runstatedir (value #t))
+                (includedir (value #t))
+                (oldincludedir (value #t))
+                (docdir (value #t))
+                (infodir (value #t))
+                (htmldir (value #t))
+                (dvidir (value #t))
+                (pdfdir (value #t))
+                (psdir (value #t))
+                (libdir (value #t))
+                (lispdir (value #t))
+                (localedir (value #t))
+                (mandir (value #t))
+                (man1dir (value #t))
+                (man2dir (value #t))
+                (srcdir (value #t))))
+
+(define %configure-help-lines
+        '("    --prefix=DIR"
+                "    --exec-prefix=DIR"
+                "    --bindir=DIR --sbindir=DIR --libexecdir=DIR"
+                "    --datarootdir=DIR --datadir=DIR"
+                "    --sysconfdir=DIR --sharedstatedir=DIR --localstatedir=DIR --runstatedir=DIR"
+                "    --includedir=DIR --oldincludedir=DIR"
+                "    --docdir=DIR --infodir=DIR --htmldir=DIR --dvidir=DIR --pdfdir=DIR --psdir=DIR"
+                "    --libdir=DIR --lispdir=DIR --localedir=DIR"
+                "    --mandir=DIR --man1dir=DIR --man2dir=DIR"
+                "    --srcdir=DIR"
+                "        configure extension: set GNU directory variables"))
 
 (define (trim-trailing-slashes s)
   (let loop ((str s))
@@ -109,3 +152,38 @@ Keyword arguments override defaults from the GNU make manual."
           (if man2dir man2dir (join-dir (reference "mandir" #f) "man2")))
   (assign "srcdir"
           (if srcdir srcdir ".")))
+
+(define (configure-init-hook options)
+        (add-directory-variables
+         #:prefix (option-ref options 'prefix #f)
+         #:exec-prefix (option-ref options 'exec-prefix #f)
+         #:bindir (option-ref options 'bindir #f)
+         #:sbindir (option-ref options 'sbindir #f)
+         #:libexecdir (option-ref options 'libexecdir #f)
+         #:datarootdir (option-ref options 'datarootdir #f)
+         #:datadir (option-ref options 'datadir #f)
+         #:sysconfdir (option-ref options 'sysconfdir #f)
+         #:sharedstatedir (option-ref options 'sharedstatedir #f)
+         #:localstatedir (option-ref options 'localstatedir #f)
+         #:runstatedir (option-ref options 'runstatedir #f)
+         #:includedir (option-ref options 'includedir #f)
+         #:oldincludedir (option-ref options 'oldincludedir #f)
+         #:docdir (option-ref options 'docdir #f)
+         #:infodir (option-ref options 'infodir #f)
+         #:htmldir (option-ref options 'htmldir #f)
+         #:dvidir (option-ref options 'dvidir #f)
+         #:pdfdir (option-ref options 'pdfdir #f)
+         #:psdir (option-ref options 'psdir #f)
+         #:libdir (option-ref options 'libdir #f)
+         #:lispdir (option-ref options 'lispdir #f)
+         #:localedir (option-ref options 'localedir #f)
+         #:mandir (option-ref options 'mandir #f)
+         #:man1dir (option-ref options 'man1dir #f)
+         #:man2dir (option-ref options 'man2dir #f)
+         #:srcdir (option-ref options 'srcdir #f)))
+
+(register-extension!
+ #:id 'configure
+ #:option-spec %configure-option-spec
+ #:help-lines %configure-help-lines
+ #:init-hook configure-init-hook)

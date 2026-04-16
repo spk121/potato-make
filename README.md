@@ -120,6 +120,80 @@ Examples:
 ./build.scm --no-execution all
 ```
 
+## Extensions
+
+Potato Make supports module-based extensions that can decorate command-line
+parsing and initialization behavior.
+
+An extension can contribute:
+
+1. Additional `getopt-long` option entries
+2. Additional lines in `--help` output
+3. An initialization hook that receives parsed options and can update makevars
+
+Extensions are registered through `register-extension!` in the `(potato make)`
+module.
+
+```scheme
+(register-extension!
+  #:id 'my-extension
+  #:option-spec '((my-flag (value #t)))
+  #:help-lines '("    --my-flag=VALUE"
+                 "        example extension option")
+  #:init-hook (lambda (options)
+                ;; inspect options and set makevars/rules
+                #t))
+```
+
+The extension must be imported before calling `initialize`, so its option spec
+and hook are registered first.
+
+```scheme
+(use-modules (potato make)
+             (my extension))
+(initialize)
+```
+
+## Configure Extension
+
+The `(potato configure)` module is a built-in extension plugin. Importing it
+before `initialize` adds GNU-style install directory options and applies them
+to makevars during initialization.
+
+```scheme
+(use-modules (potato make)
+             (potato configure))
+
+(initialize)
+;; rules
+(execute)
+```
+
+It also exports `add-directory-variables` for direct/manual use.
+
+Supported long options from this extension:
+
+1. `--prefix=DIR`
+2. `--exec-prefix=DIR`
+3. `--bindir=DIR`, `--sbindir=DIR`, `--libexecdir=DIR`
+4. `--datarootdir=DIR`, `--datadir=DIR`
+5. `--sysconfdir=DIR`, `--sharedstatedir=DIR`, `--localstatedir=DIR`, `--runstatedir=DIR`
+6. `--includedir=DIR`, `--oldincludedir=DIR`
+7. `--docdir=DIR`, `--infodir=DIR`, `--htmldir=DIR`, `--dvidir=DIR`, `--pdfdir=DIR`, `--psdir=DIR`
+8. `--libdir=DIR`, `--lispdir=DIR`, `--localedir=DIR`
+9. `--mandir=DIR`, `--man1dir=DIR`, `--man2dir=DIR`
+10. `--srcdir=DIR`
+
+Example:
+
+```bash
+./build.scm --prefix=/opt/pkg --exec-prefix=/opt/pkg/exec --srcdir=/tmp/src all
+```
+
+After initialization, the configure extension sets directory makevars
+(`prefix`, `exec_prefix`, `bindir`, `mandir`, etc.) using GNU defaults unless
+overridden by one of the extension options above.
+
 ## MAKEVARS
 
 A hash table called `%makevars` stores string keys and values used by
