@@ -170,8 +170,8 @@ arguments."
         (%opt-builtins #f)
         (%opt-environment #f)
         (%opt-elevate-environment #f)
-        (%opt-no-errors #f)
-        (%opt-continue-on-error #f)
+      (%opt-ignore-errors #f)
+      (opt-continue-on-error #f)
         (%opt-no-execution #f)
         (%opt-ascii #f)
         (%opt-strict #f))
@@ -204,7 +204,7 @@ arguments."
             (when (member "ignore-errors" tokens)
               (set! %opt-ignore-errors #t))
             (when (member "continue-on-error" tokens)
-              (set! %opt-continue-on-error #t))
+              (set! opt-continue-on-error #t))
             (when (member "strict" tokens)
               (set! %opt-strict #t))
             (when (member "no-execution" tokens)
@@ -222,7 +222,7 @@ arguments."
     (when (option-ref options 'ignore-errors #f)
       (set! %opt-ignore-errors #t))
     (when (option-ref options 'continue-on-error #f)
-      (set! %opt-continue-on-error #t))
+      (set! opt-continue-on-error #t))
     (when (option-ref options 'no-execution #f)
       (set! %opt-no-execution #t))
     (when (option-ref options 'ascii #f)
@@ -247,10 +247,11 @@ arguments."
       (initialize-rules %targets
                         %opt-builtins
                         %opt-ignore-errors
-                        %opt-continue-on-error
+                        opt-continue-on-error
                         %opt-no-execution
                         %verbosity
                         %opt-ascii)
+      (set! %opt-continue-on-error opt-continue-on-error)
       (set! %initialized #t)
       %targets
       )))
@@ -294,6 +295,6 @@ targets listed on the parsed command-line are used."
               (print "The recipe for “~A” has failed.~%" target)
               (if (and %opt-continue-on-error (not (null? rest)))
                   (loop (car rest) (cdr rest) #f)
-                  #f)))))
+                  #f))))))
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 

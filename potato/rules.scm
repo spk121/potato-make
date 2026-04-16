@@ -619,6 +619,18 @@ failure condition happens, mark the node as having failed."
       (let* ((opt/recipe (list-ref recipes i))
              (opt (car opt/recipe))
              (recipe (cdr opt/recipe)))
+        (when (and %no-execution?
+                   (not (eq? 'always-execute opt)))
+          ;; In no-execution mode, recipes are skipped unless they are
+          ;; explicitly marked always-execute.
+          (when (and (string? recipe)
+                     (or (and (= %verbosity 2) (not (eq? 'silent opt)))
+                         (= %verbosity 3)))
+            (format #t "~A~%~!" recipe))
+          (set-pass! node)
+          (set! i (1+ i))
+          (continue))
+
         ;; Recipes are either
         ;; - strings to pass to system
         ;; - procedures that return a string which is passed

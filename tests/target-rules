@@ -155,6 +155,7 @@ exec guile -L . -s "$0" "$@"
 ;; top-level targets even when an earlier one fails.
 (test-assert "--continue-on-error keeps building later targets"
   (begin
+    (install-alternate-system-driver stub-system-fail)
     (initialize '("test" "--continue-on-error" "bad.exe" "good.exe"))
     (: "bad.exe" '("bad.c")
        (~ "cc -o" $@ $<))
@@ -164,5 +165,29 @@ exec guile -L . -s "$0" "$@"
     (: "good.c" '() #t)
     (and (not (execute))
          (string=? %cmd "cc -o good.exe good.c"))))
+
+;; Non-nominal: --no-execution should skip ordinary recipes.
+(test-assert "--no-execution skips default recipes"
+  (begin
+    (install-alternate-system-driver stub-system-pass)
+    (set! %cmd #f)
+    (initialize '("test" "--no-execution" "foo.exe"))
+    (: "foo.exe" '("foo.c")
+       (~ "cc -o" $@ $<))
+    (: "foo.c" '() #t)
+    (and (execute)
+         (not %cmd))))
+
+;; Non-nominal: --no-execution still runs recipes marked always-execute (~+).
+(test-assert "--no-execution still runs always-execute recipes"
+  (begin
+    (install-alternate-system-driver stub-system-pass)
+    (set! %cmd #f)
+    (initialize '("test" "--no-execution" "foo.exe"))
+    (: "foo.exe" '("foo.c")
+       (~+ "cc -o" $@ $<))
+    (: "foo.c" '() #t)
+    (and (execute)
+         (string=? %cmd "cc -o foo.exe foo.c"))))
 
 (test-end "target_rules")
