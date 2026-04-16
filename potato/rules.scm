@@ -459,7 +459,7 @@ installs it as the system driver.  Returns the old system driver."
            (cond
             ((and (file-exists? name)
                   (regular-file? name)
-                  (>= (node-get-mtime node) (compute-mtime name)))
+                  (> (compute-mtime name) (node-get-mtime node)))
              name)
             ((not (file-exists? name))
              name)
@@ -482,7 +482,7 @@ installs it as the system driver.  Returns the old system driver."
         (cond
          ((and (file-exists?  primary-prerequisite)
                (regular-file? primary-prerequisite)
-               (> (node-get-mtime node) (compute-mtime primary-prerequisite)))
+               (> (compute-mtime primary-prerequisite) (node-get-mtime node)))
           (list primary-prerequisite))
          (else
           '())))))

@@ -221,6 +221,39 @@ exec guile -L . -s "$0" "$@"
     (: "foo.y" '() #t)
     (execute)))
 
+(test-assert "A target rule includes only newer prerequisites in $? and $$?."
+  (let* ((base (number->string (getpid)))
+         (target (string-append "pmake-target-" base ".tmp"))
+         (older-prereq (string-append "pmake-older-" base ".tmp"))
+         (newer-prereq (string-append "pmake-newer-" base ".tmp")))
+    (for-each
+     (lambda (f)
+       (false-if-exception (delete-file f)))
+     (list target older-prereq newer-prereq))
+
+    (call-with-output-file older-prereq (lambda (p) (display "older" p)))
+    (call-with-output-file target (lambda (p) (display "target" p)))
+    (call-with-output-file newer-prereq (lambda (p) (display "newer" p)))
+
+    ;; Ensure deterministic order: older-prereq < target < newer-prereq
+    (system (string-append "touch -t 202401010101.01 " older-prereq))
+    (system (string-append "touch -t 202401010102.01 " target))
+    (system (string-append "touch -t 202401010103.01 " newer-prereq))
+
+    (let ((ok
+           (begin
+             (initialize '("test"))
+             (: target (list older-prereq newer-prereq)
+                (lambda ()
+                  (and (equal? ($$?) (list newer-prereq))
+                       (string=? ($?) newer-prereq))))
+             (execute #:targets (list target)))))
+      (for-each
+       (lambda (f)
+         (false-if-exception (delete-file f)))
+       (list target older-prereq newer-prereq))
+      ok)))
+
 ;;;;;;;;;;;;;;;;
 
 (test-equal "A suffix rule with a prerequisite defines $@."
