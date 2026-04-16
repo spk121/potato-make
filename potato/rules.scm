@@ -509,32 +509,32 @@ installs it as the system driver.  Returns the old system driver."
 (define (add-builtins)
   #|
   (-> ".c" ""
-      (~ ($ CC) ($ CFLAGS) ($ LDFLAGS) "-o" $@ $<))
+    (~ ($ CC) ($ CFLAGS) ($ LDFLAGS) "-o" $@ $<))
   (-> ".f" ""
-      (~ ($ FC) ($ FFLAGS) ($ LDFLAGS) "-o" $@ $<))
+    (~ ($ FC) ($ FFLAGS) ($ LDFLAGS) "-o" $@ $<))
   (-> ".sh" ""
-      (~ "cp" $< $@)
-      (~ "chmod a+x" $< $@))
+    (~ "cp" $< $@)
+    (~ "chmod a+x" $< $@))
   |#
   (-> ".c" ".o"
-      (~ ($ CC) ($ CFLAGS) "-c" $<))
+    (~ ($ CC) ($ CFLAGS) "-c" $<))
   (-> ".f" ".o"
-      (~ ($ FC) ($ FFLAGS) ",c" $<))
+    (~ ($ FC) ($ FFLAGS) ",c" $<))
   (-> ".y" ".o"
-      (~ ($ YACC) ($ YFLAGS) $<))
+    (~ ($ YACC) ($ YFLAGS) $<))
   (-> ".l" ".o"
-      (~ ($ LEX) ($ LFLAGS) $<)
-      (~ ($ CC) ($ CFLAGS) "-c lex.yy.c")
-      "rm -f lex.yy.c"
-      (~ "mv lex.yy.o" $@))
+    (~ ($ LEX) ($ LFLAGS) $<)
+    (~ ($ CC) ($ CFLAGS) "-c lex.yy.c")
+    "rm -f lex.yy.c"
+    (~ "mv lex.yy.o" $@))
   (-> ".y" ".c"
-      (~ ($ YACC) ($ YFLAGS) $<)
-      (~ "mv y.tab.c" $@))
+    (~ ($ YACC) ($ YFLAGS) $<)
+    (~ "mv y.tab.c" $@))
   (-> ".l" ".c"
-      (~ ($ LEX) ($ LDFLAGS) $<)
-      (~ "mv lex.yy.c" $@))
+    (~ ($ LEX) ($ LDFLAGS) $<)
+    (~ "mv lex.yy.c" $@))
   (-> ".scm" ".go"
-      (~ ($ GUILD) "compile" ($ GFLAGS) $<)))
+    (~ ($ GUILD) "compile" ($ GFLAGS) $<)))
 
 (define (run-target-rule! node)
   "Runs the (singular) target rule associated with this node."
