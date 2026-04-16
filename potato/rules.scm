@@ -619,7 +619,7 @@ failure condition happens, mark the node as having failed."
         ;;   to system
         ;; - procedures (that don't return a string) that are executed
         ;;   that pass unless they return #f
-        ;; OPT is one of 'default, 'ignore, 'silent
+        ;; OPT is one of 'default, 'ignore-error, 'silent, 'always-execute
 
         (cond
          ((eq? recipe #t)
@@ -667,6 +667,12 @@ failure condition happens, mark the node as having failed."
          (else
           ;; Can't be converted to a viable string or procedure
           (scm-error 'misc-error "run-recipes!" "bad recipe: ~S" (list recipe) #f)))
+
+        (when (and (failed? node)
+                   (or %ignore-errors?
+                       (eq? 'ignore-error opt)))
+          ;; Ignore this recipe failure and keep going.
+          (set-pass! node))
 
         (when (failed? node) (break))
         (set! i (1+ i))))

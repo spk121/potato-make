@@ -89,6 +89,8 @@ exec guile -L . -s "$0" "$@"
 (test-assert "install failing alternate system driver"
   (false-if-exception (install-alternate-system-driver stub-system-fail)))
 
+;; Non-nominal: with a failing system driver and no ignore option,
+;; execute should fail the target.
 (test-equal "target rule check failure of system call"
   #f
   (begin
@@ -97,6 +99,7 @@ exec guile -L . -s "$0" "$@"
        (~ "cc -o" $@ $<))
     (execute)))
 
+;; Non-nominal: a recipe procedure that returns #f is treated as failure.
 (test-equal "target rule check failure of scheme procedure"
   #f
   (begin
@@ -105,5 +108,33 @@ exec guile -L . -s "$0" "$@"
        (lambda ()
          #f))
     (execute)))
+
+;; Non-nominal: first recipe fails, but per-recipe ignore (~-) should
+;; allow the next recipe to run and the overall target to pass.
+(test-assert "ignore-error recipe option is honored and execution continues"
+  (let ((continued? #f))
+    (initialize '("test" "foo.exe"))
+    (: "foo.exe" '("foo.c")
+       (~- "cc -o" $@ $<)
+       (lambda ()
+         (set! continued? #t)
+         #t))
+    (: "foo.c" '() #t)
+    (and (execute)
+         continued?)))
+
+;; Non-nominal: global --ignore-errors should have the same effect even
+;; when the failing recipe does not use the per-recipe ignore marker.
+(test-assert "--ignore-errors is honored and execution continues"
+  (let ((continued? #f))
+    (initialize '("test" "--ignore-errors" "foo.exe"))
+    (: "foo.exe" '("foo.c")
+       (~ "cc -o" $@ $<)
+       (lambda ()
+         (set! continued? #t)
+         #t))
+    (: "foo.c" '() #t)
+    (and (execute)
+         continued?)))
 
 (test-end "target_rules")
