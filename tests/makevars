@@ -37,6 +37,12 @@ exec guile -L . -s "$0" "$@"
     (:= FOO4 "BAR4")
     ($ FOO4)))
 
+(test-equal "Quoted makevar reference wraps value in quotes."
+  "\"BAR4\""
+  (begin
+    (:= FOO4 "BAR4")
+    (Q FOO4)))
+
 (test-equal "Makevars can be set lazily in the script."
   "BAR5"
   (begin
@@ -56,6 +62,18 @@ exec guile -L . -s "$0" "$@"
     ($ FOO7)
     (let ((val (hash-ref (@@ (potato makevars) %makevars) "FOO7")))
       (car val))))
+
+(test-equal "Transformer applies to each token in value."
+  "AAA BBB"
+  (begin
+    (:= FOO7X "aaa bbb")
+    ($ FOO7X string-upcase)))
+
+(test-equal "Quoted transformer applies and preserves quotes around full value."
+  "\"AAA BBB\""
+  (begin
+    (:= FOO7Y "aaa bbb")
+    (Q FOO7Y string-upcase)))
 
 (test-equal "Referencing an unset makevar returns an empty string."
   ""
@@ -78,6 +96,38 @@ exec guile -L . -s "$0" "$@"
   (begin
     (:= FOO11 #\x)
     ($ FOO11)))
+
+(test-assert "$$ returns a thunk for existing key and yields its value."
+  (begin
+    (:= FOO11B "BAR11B")
+    (let ((f ($$ FOO11B)))
+      (and (procedure? f)
+           (string=? (f) "BAR11B")))))
+
+(test-equal "$$ returns #f for missing key."
+  #f
+  ($$ FOO11C))
+
+(test-assert "$$ forces lazy promise on demand."
+  (begin
+    (?= FOO11D "BAR11D")
+    (let ((f ($$ FOO11D)))
+      (and (procedure? f)
+           (string=? (f) "BAR11D")))))
+
+(test-equal "SHELL from environment is ignored."
+  ""
+  (begin
+    (setenv "SHELL" "IGNORE_ME")
+    (initialize '("test" "--environment"))
+    ($ SHELL)))
+
+(test-equal "MAKEFLAGS key itself is ignored as makevar."
+  ""
+  (begin
+    (setenv "MAKEFLAGS" "MAKEFLAGS=IGNORE_THIS")
+    (initialize '("test" "--environment"))
+    ($ MAKEFLAGS)))
 
 (test-equal "Makevar script assignment overrides command-line assignment."
   "BAZ14"
@@ -126,6 +176,12 @@ exec guile -L . -s "$0" "$@"
     (initialize '("test" "--elevate-environment"))
     (:= FOO16 "BAZ16")
     ($ FOO16)))
+
+(test-equal "Builtins are available with --builtins."
+  "cc"
+  (begin
+    (initialize '("test" "--builtins"))
+    ($ CC)))
 
 (test-end "makevars")
 

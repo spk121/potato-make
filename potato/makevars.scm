@@ -73,7 +73,7 @@ priority."
   ;; Note that VAL can be either a string or a procedure.  If it is a
   ;; procedure, it is converted into a promise to be evaluated later.
   (let* ((val&priority (hash-ref %makevars key))
-         (old-val (if (pair? val&priority) (cdr val&priority) #f))
+      (old-val (if (pair? val&priority) (car val&priority) #f))
          (old-priority (if (pair? val&priority) (cdr val&priority) #f)))
     (when (or (not old-val)
               (override? old-priority new-priority))
@@ -313,13 +313,13 @@ space-separated token in the looked-up value."
     (unless (string? key)
       (bad-proc-output "reference" key)))
   (when (not (string? key))
-    (set! key (format #t "~a" key)))
+    (set! key (format #f "~a" key)))
   (let* ((val&priority (hash-ref %makevars key))
          (val (if (pair? val&priority) (car val&priority) #f))
          (priority (if (pair? val&priority) (cdr val&priority) #f)))
     (if (not val)
         (if %strict
-            (error (format #t "There is no makevar for key ~a~%~!" key))
+        (error (format #f "There is no makevar for key ~a" key))
             ;; else
             (if quoted?
                 "\"\""
@@ -382,21 +382,20 @@ that string."
   (when (procedure? key)
     (set! key (key))
     (unless (string? key)
-      (bad-proc-output "reference" key))
+      (bad-proc-output "reference" key)))
   (let* ((val&priority (hash-ref %makevars key))
-         (val (if (pair? val&priority) (cdr val&priority) #f)))
+         (val (if (pair? val&priority) (car val&priority) #f)))
     (if (not val)
         #f
         ;; else
-        (begin
-          (if (promise? val)
-              (lambda ()
-                (let ((VAL (force val)))
-                  ;; FIXME: put verbose print here?
-                  VAL))
+        (if (promise? val)
+            (lambda ()
+              (let ((VAL (force val)))
+                ;; FIXME: put verbose print here?
+                VAL))
             ;; else
             (lambda ()
-              val)))))))
+              val)))))
 
 (define-syntax $$
   (lambda (stx)
