@@ -26,6 +26,7 @@
            string-compose         ~
            silent-compose         ~@
            always-execute-compose ~+
+           continue-on-error-compose ~k
            ignore-error-compose   ~-
            ))
 
@@ -114,6 +115,11 @@ it is evaluated."
   (cons 'always-execute (apply base-compose args)))
 
 (define ~+ always-execute-compose)
+
+(define (continue-on-error-compose . args)
+  (cons 'continue-on-error (apply base-compose args)))
+
+(define ~k continue-on-error-compose)
 
 (define (regular-file? filename)
   (unless (string? filename)
@@ -619,7 +625,8 @@ failure condition happens, mark the node as having failed."
         ;;   to system
         ;; - procedures (that don't return a string) that are executed
         ;;   that pass unless they return #f
-        ;; OPT is one of 'default, 'ignore-error, 'silent, 'always-execute
+        ;; OPT is one of 'default, 'ignore-error, 'continue-on-error,
+        ;; 'silent, 'always-execute
 
         (cond
          ((eq? recipe #t)
@@ -670,6 +677,7 @@ failure condition happens, mark the node as having failed."
 
         (when (and (failed? node)
                    (or %ignore-errors?
+                 (eq? 'continue-on-error opt)
                        (eq? 'ignore-error opt)))
           ;; Ignore this recipe failure and keep going.
           (set-pass! node))

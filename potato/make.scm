@@ -26,6 +26,7 @@
                string-compose       ~
                silent-compose       ~@
                always-execute-compose ~+
+               continue-on-error-compose ~k
                ignore-error-compose ~-
                install-alternate-system-driver
                               ))
@@ -276,20 +277,23 @@ targets listed on the parsed command-line are used."
           (debug "There are no target rules in the recipe.~%"))))
 
   ;; Build each target in order.
-  (when (not (null? targets))
-    (let loop ((target (car targets))
-               (rest (cdr targets)))
-      (if (not (build target))
-          (begin
-            (print "The recipe for “~A” has failed.~%" target)
-            #f)
-          ;; else
-          (begin
-            (print "The recipe “~A” finished successfully.~%" target)
-            (if (not (null? rest))
-                (loop (car rest) (cdr rest))
+  (if (null? targets)
+      #t
+      (let loop ((target (car targets))
+                 (rest (cdr targets))
+                 (all-passed? #t))
+        (if (build target)
+            (begin
+              (print "The recipe “~A” finished successfully.~%" target)
+              (if (null? rest)
+                  all-passed?
+                  (loop (car rest) (cdr rest) all-passed?)))
 
-                ;; True if all targets are built successfully.
-                #t))))))
+            ;; else, this target has failed
+            (begin
+              (print "The recipe for “~A” has failed.~%" target)
+              (if (and %opt-continue-on-error (not (null? rest)))
+                  (loop (car rest) (cdr rest) #f)
+                  #f)))))
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 

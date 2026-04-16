@@ -137,4 +137,32 @@ exec guile -L . -s "$0" "$@"
     (and (execute)
          continued?)))
 
+;; Non-nominal: local continue-on-error (~k) should continue to the
+;; next recipe after a failing command.
+(test-assert "local continue-on-error is honored and execution continues"
+  (let ((continued? #f))
+    (initialize '("test" "foo.exe"))
+    (: "foo.exe" '("foo.c")
+       (~k "cc -o" $@ $<)
+       (lambda ()
+         (set! continued? #t)
+         #t))
+    (: "foo.c" '() #t)
+    (and (execute)
+         continued?)))
+
+;; Non-nominal: global --continue-on-error should keep building later
+;; top-level targets even when an earlier one fails.
+(test-assert "--continue-on-error keeps building later targets"
+  (begin
+    (initialize '("test" "--continue-on-error" "bad.exe" "good.exe"))
+    (: "bad.exe" '("bad.c")
+       (~ "cc -o" $@ $<))
+    (: "bad.c" '() #t)
+    (: "good.exe" '("good.c")
+       (~ "cc -o" $@ $<))
+    (: "good.c" '() #t)
+    (and (not (execute))
+         (string=? %cmd "cc -o good.exe good.c"))))
+
 (test-end "target_rules")
