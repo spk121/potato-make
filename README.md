@@ -48,47 +48,104 @@ exec guile -s "$0" "$@"
 
 ## Command-Line Arguments
 
-This boilerplate loads the library functions and it parses the
-command-line arguments.  The command-line arguments are the following,
+`initialize` is what parses arguments and prepares the build context.
+In the usual script form:
 
-    <your-script-name> [-hvqVeEbknB] [var=value...] [target_name...]
-             -h, --help
-                 displays help
-             -v, --version
-                 displays the version number of this script
-             -V [0,1,2,3], --verbosity=[0,1,2,3]
-                 choose the verbosity of the output
-             -e, --environment
-                 environment variables are converted to makevars
-             -E, --elevate-environment
-                 environment variables are converted to makevars
-                 and will override makevars set in the script
-             -b, --builtins
-                 adds some default makevars and suffix rules
-             --ignore-errors  [NOT IMPLEMENTED YET]
-                 keep building even if a command fails
-             -k, --continue-on-error  [NOT IMPLEMENTED YET]
-                 keep building some targets even if a command fails
-             -n, --no-execute  [NOT IMPLEMENTED YET]
-                 print rules, but only execute rules marked as
-                 'always execute'
-             -a, --ascii
-                 use ASCII-only output and no colors
-             -W, --warn  [NOT IMPLEMENTED YET]
-                 enable warning messages
-             
-             [var=value...]
-               set the value of makevars
-             [target_name...]
-               Set one or more targets to be executed.  If no target
-               is specified, the first target found will be executed.
+```scheme
+(use-modules (potato make))
+(initialize)
+;; rules
+(execute)
+```
+
+`initialize` reads the process command line (`$0 "$@"`) and applies:
+
+1. options
+2. makevar assignments (`KEY=VALUE`)
+3. target names
+
+The script then runs `execute`, which builds the selected targets.
+
+You can also pass an explicit argument list to `initialize`:
+
+```scheme
+(initialize '("my-build" "--verbosity=3" "CC=clang" "all"))
+```
+
+This is useful for tests or programmatic invocation.
+
+Supported command-line form:
+
+  <your-script-name> [-hvVeEbknAS] [var=value ...] [target_name ...]
+
+       -h, --help
+         display help and exit
+       -v, --version
+         display version and exit
+       -V [0,1,2,3], --verbosity=[0,1,2,3]
+         choose output level
+       -e, --environment
+         import environment variables as makevars
+       -E, --elevate-environment
+         import environment variables as makevars with
+         elevated precedence over script assignments
+       -b, --builtins
+         add built-in makevars and suffix rules
+       --ignore-errors
+         ignore recipe failures and continue
+       -k, --continue-on-error
+         continue building later top-level targets after failure
+       -n, --no-execution
+         skip normal recipe execution; run only recipes marked
+         `always-execute`
+       -a, --ascii
+         use ASCII-only output and no colors
+       -S, --strict
+         throw errors for strict missing/invalid references
+
+       [var=value ...]
+         set makevars from the command line
+       [target_name ...]
+         set one or more targets to execute; if omitted,
+         the first defined target rule is used
+
+Examples:
+
+```bash
+./build.scm
+./build.scm all
+./build.scm CC=clang CFLAGS='-O3 -g' all
+./build.scm --environment --verbosity=3 test
+./build.scm --continue-on-error bad-target good-target
+./build.scm --no-execution all
+```
 
 ## MAKEVARS
 
-A hash table called `%makevars` has string keys. These procedures
-are syntax that add quotation marks around `key`, so you call them without the quotes on
-`key`. The returned value of `$` is a string, or an empty string on failure.
-You define makevars in the script, in the environment, or on the command line.
+A hash table called `%makevars` stores string keys and values used by
+rules and recipes.
+
+`initialize` builds this table before any rules are executed.
+
+Initialization sources and priority:
+
+1. Script assignments (`:=`, `?=`) - highest priority
+2. Command-line assignments (`KEY=VALUE`)
+3. `MAKEFLAGS` assignments (when `--environment` or `--elevate-environment` is used)
+4. Environment variables (when `--environment` or `--elevate-environment` is used)
+5. Built-ins (when `--builtins` is used) - lowest priority
+
+Lower numeric priority overrides higher numeric priority.
+
+With `--elevate-environment`, script assignments do not override
+command-line, `MAKEFLAGS`, or environment values.
+
+Notes:
+
+1. `SHELL` and `MAKEFLAGS` are not imported as makevars.
+2. `MAKEFLAGS` is still parsed for `KEY=VALUE` entries when environment import is enabled.
+3. In strict mode (`--strict`), referencing an unset makevar raises an error.
+4. Without strict mode, unset makevars return an empty string.
 
     ($ KEY) -> "VAL"
 
@@ -98,6 +155,13 @@ You define makevars in the script, in the environment, or on the command line.
         string.  If a string-to-string transformer procedure is
         provided, apply it to each space-separated token in the
         result.
+
+    (Q key [transformer])
+        Same as `$`, but wraps the returned value in double quotes.
+
+    ($$ key)
+        Return a procedure that yields the current value of `key`, or
+        `#f` when the key is unset.
 
     (?= key val)
         Assign `val` to `key` in the `%makevars` hash table. If `val`
@@ -217,9 +281,10 @@ target file, based on the filename extensions.
      (~ "string" (lambda () "string") ($ KEY) $@ 100 )
 
      Three versions of `~` with special effects
-     (~- ...)   ignores any errors
-     (~@ ...)   doesn't print recipe to console
-     (~+ ...)   runs even when `--no-execute` was chosen
+    (~- ...)   ignores recipe failure and continues
+    (~@ ...)   does not print recipe to the console
+    (~+ ...)   runs even when `--no-execution` was chosen
+    (~k ...)   continues to the next recipe after a failure
 
 ## Automatic Variables
 
