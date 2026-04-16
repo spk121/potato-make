@@ -1,0 +1,53 @@
+#!/usr/bin/env sh
+exec guile -L . -s "$0" "$@"
+!#
+(use-modules (potato make)
+             (potato configure)
+             (srfi srfi-64))
+
+(test-begin "configure")
+
+(test-equal "Directory defaults use GNU-style paths."
+  '(("prefix" . "/usr/local")
+    ("exec_prefix" . "/usr/local")
+    ("bindir" . "/usr/local/bin")
+    ("datarootdir" . "/usr/local/share")
+    ("docdir" . "/usr/local/share/doc/yourpkg")
+    ("runstatedir" . "/usr/local/var/run")
+    ("mandir" . "/usr/local/share/man")
+    ("man1dir" . "/usr/local/share/man/man1"))
+  (begin
+    (initialize '("test"))
+    (add-directory-variables)
+    (list
+     (cons "prefix" (reference "prefix" #f))
+     (cons "exec_prefix" (reference "exec_prefix" #f))
+     (cons "bindir" (reference "bindir" #f))
+     (cons "datarootdir" (reference "datarootdir" #f))
+     (cons "docdir" (reference "docdir" #f))
+     (cons "runstatedir" (reference "runstatedir" #f))
+     (cons "mandir" (reference "mandir" #f))
+     (cons "man1dir" (reference "man1dir" #f)))))
+
+(test-equal "Keyword overrides are applied and propagated."
+  '(("prefix" . "/opt/acme")
+    ("exec_prefix" . "/opt/acme/exec")
+    ("bindir" . "/opt/acme/exec/bin")
+    ("docdir" . "/opt/docs")
+    ("htmldir" . "/opt/docs")
+    ("man2dir" . "/custom/man2"))
+  (begin
+    (initialize '("test"))
+    (add-directory-variables #:prefix "/opt/acme"
+                             #:exec-prefix "/opt/acme/exec"
+                             #:docdir "/opt/docs"
+                             #:man2dir "/custom/man2")
+    (list
+     (cons "prefix" (reference "prefix" #f))
+     (cons "exec_prefix" (reference "exec_prefix" #f))
+     (cons "bindir" (reference "bindir" #f))
+     (cons "docdir" (reference "docdir" #f))
+     (cons "htmldir" (reference "htmldir" #f))
+     (cons "man2dir" (reference "man2dir" #f)))))
+
+(test-end "configure")
