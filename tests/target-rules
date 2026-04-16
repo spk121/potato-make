@@ -24,6 +24,10 @@ exec guile -L . -s "$0" "$@"
   (set! %cmd cmd)
   1)
 
+(define (stub-system-pass-quiet cmd)
+  (set! %cmd cmd)
+  0)
+
 
 (test-assert "Install alternate system driver."
   (false-if-exception (install-alternate-system-driver stub-system-pass)))
@@ -67,6 +71,33 @@ exec guile -L . -s "$0" "$@"
        (~ "cc -o foo.exe foo.c"))
     (execute)
     %cmd))
+
+(test-assert "default recipe echoes command at default verbosity"
+  (let ((out (open-output-string)))
+    (install-alternate-system-driver stub-system-pass-quiet)
+    (set! %cmd #f)
+    (parameterize ((current-output-port out))
+      (initialize '("test" "foo.exe"))
+      (: "foo.exe" '("foo.c")
+         (~ "cc -o" $@ $<))
+      (: "foo.c" '() #t)
+      (execute))
+    (and (string=? %cmd "cc -o foo.exe foo.c")
+         (string-contains (get-output-string out) "cc -o foo.exe foo.c"))))
+
+(test-assert "silent recipe (~@) suppresses echoed command at default verbosity"
+  (let ((out (open-output-string)))
+    (install-alternate-system-driver stub-system-pass-quiet)
+    (set! %cmd #f)
+    (parameterize ((current-output-port out))
+      (initialize '("test" "foo.exe"))
+      (: "foo.exe" '("foo.c")
+         (~@ "cc -o" $@ $<))
+      (: "foo.c" '() #t)
+      (execute))
+    (and (string=? %cmd "cc -o foo.exe foo.c")
+         (not (string-contains (get-output-string out)
+                               "cc -o foo.exe foo.c")))))
 
 (test-equal "target rule using string-compose on special variables"
   "cc -o foo.exe foo.c"
