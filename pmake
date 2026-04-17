@@ -1,3 +1,0 @@
-#!/usr/bin/env sh
-exec guile -L . -e '(@ (make main) main)' -s "$0" "$@"
-!#
