@@ -7,6 +7,7 @@
             not-a-regular-file
             not-a-procedure
             no-read-access-to-file
+            invalid-argument-type
             ))
 
 (define (make-bad-key-type origin irritants)
@@ -78,3 +79,14 @@
 
 (define (no-read-access-to-file origin irritant)
   (raise-exception (make-no-read-access-to-file origin irritant)))
+
+(define (make-invalid-argument-type origin irritants)
+  (make-exception
+   (make-programming-error)
+   (make-exception-with-origin origin)
+   (make-exception-with-message "Invalid argument type")
+   (make-exception-with-irritants irritants)))
+
+(define (invalid-argument-type origin irritant)
+  (raise-exception (make-invalid-argument-type origin irritant)))
+
