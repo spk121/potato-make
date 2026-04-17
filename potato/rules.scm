@@ -586,7 +586,7 @@ runs them one-by-one, quitting on the first success."
               (child (list-ref children i)))
           (when (passed? child)
             (when (>= %verbosity 3)
-              (format #t "~A: attempting to make using ~a~A~a ~a ~a~A~a rule"
+              (format #t "~A: attempting to make using ~a~A~a ~a ~a~A~a rule "
                       (node-get-name node)
                       (lquo) (suffix-rule-get-source rule) (rquo)
                       (right-arrow)
