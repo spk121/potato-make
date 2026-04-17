@@ -1,0 +1,42 @@
+Potato Make
+===========
+
+Version 1.0 (see potato/make.scm for the canonical version string).
+
+Potato Make is a build tool written in Guile Scheme.  It is a library
+that aims to simplify the task of maintaining, updating, and
+regenerating programs.  It is inspired by the `make` utility in
+IEEE Std 1003.1-2017 (POSIX).  With this library, you can write
+build scripts in Guile Scheme that use target rules, suffix rules,
+and makevars to describe how files are built.
+
+Installation
+------------
+
+See the file INSTALL for installation instructions.
+
+Source Layout
+-------------
+
+  potato/       The library modules.
+    make.scm      Main entry point: initialize, execute, extensions.
+    rules.scm     Target rules, suffix rules, recipe execution.
+    makevars.scm  Makevar hash table and accessors.
+    builtins.scm  Built-in makevars and suffix rules.
+    configure.scm Extension for GNU-style install directory options.
+    text.scm      Terminal output helpers (color, Unicode).
+    exceptions.scm Custom exception types.
+
+  examples/     Example build scripts.
+
+  tests/        Test scripts for the library.
+
+  reference.md  Technical documentation.
+
+  LICENSE       Copying conditions (MIT license).
+
+Copying
+-------
+
+This package is distributed under the terms of the MIT license.
+See the file LICENSE for details.
