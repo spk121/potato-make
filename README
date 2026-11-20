@@ -1,7 +1,7 @@
 Potato Make
 ===========
 
-Version 1.0 (see potato/make.scm for the canonical version string).
+Version 1.0.1
 
 Potato Make is a build tool written in Guile Scheme.  It is a library
 that aims to simplify the task of maintaining, updating, and
@@ -13,7 +13,41 @@ and makevars to describe how files are built.
 Installation
 ------------
 
-See the file INSTALL for installation instructions.
+    ./configure
+    make
+    make check
+    make install
+
+When building from a Git checkout, run "autoreconf -vif" first.  See
+the file INSTALL for the requirements and the details.
+
+A First Build Script
+--------------------
+
+    #!/usr/bin/env sh
+    exec guile -s "$0" "$@"
+    !#
+
+    (use-modules (potato make))
+    (initialize)
+    (:= CC "gcc")
+    (:= CFLAGS "-g -O2")
+
+    (: "all" '("foo"))
+    (: "foo" '("foo.o" "bar.o")
+      (~ ($ CC) "-o" $@ $^))
+    (-> ".c" ".o"
+      (~ ($ CC) "-c" $<))
+    (execute)
+
+Documentation
+-------------
+
+The manual is in doc/potato-make.texi.  It is installed in Info
+format, and "make html" creates an HTML version.  It can also be read
+online at
+
+    https://spk121.github.io/potato-make/
 
 Source Layout
 -------------
@@ -22,16 +56,19 @@ Source Layout
     make.scm      Main entry point: initialize, execute, extensions.
     rules.scm     Target rules, suffix rules, recipe execution.
     makevars.scm  Makevar hash table and accessors.
-    builtins.scm  Built-in makevars and suffix rules.
+    builtins.scm  Built-in makevars.
     configure.scm Extension for GNU-style install directory options.
+    lib.scm       Text and file name functions.
     text.scm      Terminal output helpers (color, Unicode).
     exceptions.scm Custom exception types.
 
+  doc/          The manual, in Texinfo format.
+
   examples/     Example build scripts.
 
-  tests/        Test scripts for the library.
+  tests/        The test suite, which is run by "make check".
 
-  reference.md  Technical documentation.
+  NEWS          The history of user-visible changes.
 
   LICENSE       Copying conditions (MIT license).
 

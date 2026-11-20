@@ -1,15 +1,14 @@
-#!/usr/bin/env sh
-exec guile -L . -s "$0" "$@"
-!#
+;;; recipe-helpers.scm -- part of the Potato Make test suite.
 
 (use-modules (potato make)
              (srfi srfi-1)
-             (srfi srfi-64))
+             (srfi srfi-64)
+             (tests common))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; RECIPE HELPERS
 
-(test-begin "recipe_helpers")
+(test-begin "recipe-helpers")
 
 (test-assert "initialize"
   (initialize))
@@ -90,8 +89,4 @@ exec guile -L . -s "$0" "$@"
   (let ((ret (~)))
     ((cdr ret))))
 
-(test-end "recipe_helpers")
-
-;; Local Variables:
-;; mode: scheme
-;; End:
+(test-exit "recipe-helpers")

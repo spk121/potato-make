@@ -1,0 +1,71 @@
+name: Deploy Documentation to GitHub Pages
+
+on:
+  # Trigger on pushes to master that affect the docs
+  push:
+    branches: [ master ]
+    paths:
+      - 'doc/**'
+      - 'Makefile.am'
+      - 'configure.ac'
+      - '.github/workflows/deploy-docs.yml'
+  # Or trigger manually from the Actions tab
+  workflow_dispatch:
+
+env:
+  DEBIAN_FRONTEND: noninteractive
+  TZ: America/Los_Angeles
+
+# Sets permissions for deploying to GitHub Pages
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# Allow only one concurrent deployment
+concurrency:
+  group: "pages"
+  cancel-in-progress: true
+
+jobs:
+  build-and-deploy:
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Install packages
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y guile-3.0 guile-3.0-dev autoconf automake pkg-config texinfo
+
+      - name: Bootstrap and configure
+        run: |
+          autoreconf -vif
+          ./configure --prefix=/usr
+
+      - name: Build HTML documentation
+        run: |
+          make html
+          ls -R doc/potato-make.html
+
+      - name: Setup GitHub Pages
+        uses: actions/configure-pages@v5
+
+      - name: Upload documentation as artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          # This uploads the *contents* of the HTML manual's directory,
+          # so that its index.html becomes the root of the site.
+          path: './doc/potato-make.html/'
+
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4

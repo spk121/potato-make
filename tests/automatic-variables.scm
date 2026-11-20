@@ -1,9 +1,9 @@
-#!/usr/bin/env sh
-exec guile -L . -s "$0" "$@"
-!#
+;;; automatic-variables.scm -- part of the Potato Make test suite.
+
 (use-modules (potato make)
              (srfi srfi-1)
-             (srfi srfi-64))
+             (srfi srfi-64)
+             (tests common))
 
 (test-begin "automatic-variables")
 
@@ -311,8 +311,4 @@ exec guile -L . -s "$0" "$@"
     (: "foo.x" '() #t)
     (execute)))
 
-(test-end "automatic-variables")
-
-;; Local Variables:
-;; mode: scheme
-;; End:
+(test-exit "automatic-variables")

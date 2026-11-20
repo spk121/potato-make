@@ -4,7 +4,6 @@
   #:use-module (ice-9 optargs)
   #:use-module (ice-9 getopt-long)
   #:use-module (ice-9 receive)
-  #:use-module (system vm trace)
   #:use-module (potato exceptions)
   #:use-module (potato makevars)
   #:use-module (potato rules)
@@ -32,21 +31,11 @@
                install-alternate-system-driver
                               ))
 
-(define %version "1.0")
-(define %debug-argv0 #f)
+(define %version "1.0.1")
 (define %registered-extension-ids '())
 (define %extension-option-spec '())
 (define %extension-help-lines '())
 (define %extension-init-hooks '())
-
-;; #:re-export (
-;;              lazy-assign ?=
-;;              assign      :=
-;;              ref         $
-;;              target-rule :
-;;              suffix-rule  ->
-;;              compose     ~
-;;              ))
 
 ;; Asynchronous events.
 ;; SIGHUP, SIGTERM, SIGINT and SIGQUIT remove the current target
@@ -71,8 +60,6 @@
 
 ;; Verbosity is 0 = silent, 1 = terse, 2 = default, 3 = verbose
 (define %verbosity 2)
-(define %opt-verbose #f)
-(define %opt-ignore-errors #f)
 (define %opt-continue-on-error #f)
 (define %targets '())
 (define %initialized #f)
@@ -100,33 +87,33 @@
     (strict            (single-char #\S) (value #f))
     ))
 
-    (define* (register-extension! #:key
-              id
-              (option-spec '())
-              (help-lines '())
-              (init-hook #f))
-      "Register an optional initialize/help extension.
-    ID must be unique; duplicate IDs are ignored."
-      (when (not (member id %registered-extension-ids))
-        (set! %registered-extension-ids
-          (cons id %registered-extension-ids))
-        (set! %extension-option-spec
-          (append %extension-option-spec option-spec))
-        (set! %extension-help-lines
-          (append %extension-help-lines help-lines))
-        (when (procedure? init-hook)
+(define* (register-extension! #:key
+                              id
+                              (option-spec '())
+                              (help-lines '())
+                              (init-hook #f))
+  "Register an optional initialize/help extension.
+ID must be unique; duplicate IDs are ignored."
+  (when (not (member id %registered-extension-ids))
+    (set! %registered-extension-ids
+      (cons id %registered-extension-ids))
+    (set! %extension-option-spec
+      (append %extension-option-spec option-spec))
+    (set! %extension-help-lines
+      (append %extension-help-lines help-lines))
+    (when (procedure? init-hook)
       (set! %extension-init-hooks
         (append %extension-init-hooks (list init-hook))))))
 
-    (define (all-option-spec)
-      (append option-spec %extension-option-spec))
+(define (all-option-spec)
+  (append option-spec %extension-option-spec))
 
 (define (display-help-and-exit argv0)
-  (format #t "~A [-hvqVeEbn] [KEY=VALUE ...] [targets ...]~%" argv0)
+  (format #t "~A [-hvVeEbknAS] [KEY=VALUE ...] [targets ...]~%" argv0)
   (format #t "    -h, --help                     print help and exit~%")
   (format #t "    -v, --version               print version and exit~%")
   (format #t "    -V 0..3, --verbosity=0..3~%")
-  (format #t "           set output level from 0=silent to 3=verbose~%")                    
+  (format #t "           set output level from 0=silent to 3=verbose~%")
   (format #t "    -e, --environment        use environment variables~%")
   (format #t "    -E, --elevate-environment~%")
   (format #t "                     use environment variables and let~%")
@@ -139,7 +126,7 @@
   (format #t "           after an error, keep building other targets~%")
   (format #t "    -n, --no-execution~%")
   (format #t "         only execute rules marked as 'always execute'~%")
-  (format #t "    -a, --ascii~%")
+  (format #t "    -A, --ascii~%")
   (format #t "                       ASCII only output and no colors~%")
   (format #t "    -S, --strict~%")
   (format #t "                causes some behaviours to throw errors~%")
@@ -151,22 +138,25 @@
 
 (define (display-version-and-exit argv0)
   (format #t "~a~%" argv0)
-  (format #t "  using potato make~a~%" %version)
+  (format #t "  using potato make ~a~%" %version)
   (exit 0))
 
 (define (parse-macros lst)
-  "Search for list for strings of the form KEY=VAR and return a list
-of pairs of KEY VAL"
+  "Search the list for strings of the form KEY=VAL and return a list
+of pairs of KEY VAL.  The string is split at the first equals sign,
+so VAL may itself contain equals signs, as in CFLAGS=-DDEBUG=1."
   (filter-map
    (lambda (str)
-     (let ((tok (string-split str #\=)))
+     (let ((idx (string-index str #\=)))
        (cond
-        ((= 1 (length tok))
+        ((not idx)
          #f)
-        ((= 2 (length tok))
-         (cons (car tok) (cadr tok)))
+        ((zero? idx)
+         ;; There is no key.
+         (invalid-macro "parse-macros" str))
         (else
-         (invalid-macro "parse-macros" str)))))
+         (cons (substring str 0 idx)
+               (substring str (1+ idx)))))))
    lst))
 
 (define (parse-targets lst)
@@ -187,6 +177,12 @@ specified by the command line.  If it is set, it is
 expected to be a list of strings that are command-line
 arguments."
 
+  ;; Each call starts from the default settings, no matter what an
+  ;; earlier call to this procedure may have set.
+  (set! %verbosity 2)
+  (set! %opt-continue-on-error #f)
+  (set! %targets '())
+
   ;; If left unset, assume user want all the command line arguments.
   (when (not arguments)
     (set! arguments (command-line)))
@@ -200,8 +196,8 @@ arguments."
         (%opt-builtins #f)
         (%opt-environment #f)
         (%opt-elevate-environment #f)
-      (%opt-ignore-errors #f)
-      (opt-continue-on-error #f)
+        (%opt-ignore-errors #f)
+        (opt-continue-on-error #f)
         (%opt-no-execution #f)
         (%opt-ascii #f)
         (%opt-strict #f))
@@ -210,14 +206,16 @@ arguments."
     (when (option-ref options 'version #f)
       (display-version-and-exit (car arguments)))
 
-    ;; Then, we do --environment, because we need to know that
-    ;; before we start parsing MAKEFLAGS
+    ;; Then, we do --environment and --elevate-environment, because we
+    ;; need to know that before we start parsing MAKEFLAGS
     (set! %opt-environment
       (option-ref options 'environment #f))
+    (set! %opt-elevate-environment
+      (option-ref options 'elevate-environment #f))
 
     ;; Parse MAKEFLAGS before the command-line, because we want
     ;; command-line options to override MAKEFLAGS options.
-    (when %opt-environment
+    (when (or %opt-environment %opt-elevate-environment)
       (let ((mf (getenv "MAKEFLAGS")))
         (when mf
           (let ((tokens (string-tokenize mf)))
@@ -247,8 +245,6 @@ arguments."
           (set! %verbosity verbosity))))
     (when (option-ref options 'builtins #f)
       (set! %opt-builtins #t))
-    (when (option-ref options 'elevate-environment #f)
-      (set! %opt-elevate-environment #t))
     (when (option-ref options 'ignore-errors #f)
       (set! %opt-ignore-errors #t))
     (when (option-ref options 'continue-on-error #f)
@@ -319,14 +315,16 @@ targets listed on the parsed command-line are used."
                  (all-passed? #t))
         (if (build target)
             (begin
-              (print "The recipe “~A” finished successfully.~%" target)
+              (print "The recipe ~a~A~a finished successfully.~%"
+                     (lquo) target (rquo))
               (if (null? rest)
                   all-passed?
                   (loop (car rest) (cdr rest) all-passed?)))
 
             ;; else, this target has failed
             (begin
-              (print "The recipe for “~A” has failed.~%" target)
+              (print "The recipe for ~a~A~a has failed.~%"
+                     (lquo) target (rquo))
               (if (and %opt-continue-on-error (not (null? rest)))
                   (loop (car rest) (cdr rest) #f)
                   #f))))))

@@ -1,0 +1,60 @@
+name: CI
+
+on:
+  push:
+    branches: [ master ]
+  pull_request:
+    branches: [ master ]
+  workflow_dispatch:
+
+env:
+  DEBIAN_FRONTEND: noninteractive
+  TZ: America/Los_Angeles
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+
+    steps:
+    - uses: actions/checkout@v6
+
+    - name: Install packages
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y guile-3.0 guile-3.0-dev autoconf automake pkg-config texinfo
+
+    - name: Configure
+      run: |
+        autoreconf -vif
+        ./configure --prefix="$(pwd)/dist"
+
+    - name: Build
+      run: make 2>&1 | tee build.log
+      shell: bash -o pipefail {0}
+
+    - name: Test
+      run: make check 2>&1 | tee test.log
+      shell: bash -o pipefail {0}
+
+    - name: Distcheck
+      run: make distcheck 2>&1 | tee distcheck.log
+      shell: bash -o pipefail {0}
+
+    - name: Upload logs
+      if: always()
+      uses: actions/upload-artifact@v6
+      with:
+        name: logs
+        path: |
+          *.log
+          tests/*.log
+
+    - name: Upload distribution tarball
+      uses: actions/upload-artifact@v6
+      with:
+        name: tarball
+        path: potato-make-*.tar.gz
+        if-no-files-found: error

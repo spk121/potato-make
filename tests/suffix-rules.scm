@@ -1,12 +1,11 @@
-#!/usr/bin/env sh
-exec guile -L . -s "$0" "$@"
-!#
+;;; suffix-rules.scm -- part of the Potato Make test suite.
 
 (use-modules (potato make)
              (srfi srfi-1)
-             (srfi srfi-64))
+             (srfi srfi-64)
+             (tests common))
 
-(test-begin "suffix_rules")
+(test-begin "suffix-rules")
 
 ;; These stubs override the driver that calls
 ;; 'system' so we can instead just investigate
@@ -21,7 +20,6 @@ exec guile -L . -s "$0" "$@"
 
 (test-assert "install alternate system driver"
   (false-if-exception (install-alternate-system-driver stub-system-pass)))
-#|
 (test-equal "Suffix rule using recipe helper and automatic variable."
   "cc -c foo.c"
   (begin
@@ -62,13 +60,13 @@ exec guile -L . -s "$0" "$@"
     (: "foo.c" '() #t)
     (execute)
     %cmd))
- |#
+
 (test-equal "Multiple possible suffix rules using procedure returning string."
   "dc -o foo.o foo.d"
   (begin
     (initialize '("test"))
     (: "all" '("foo.o"))
-    
+
     (-> ".e" ".o"
         (lambda ()
           "ec -o foo.o foo.e"))
@@ -144,4 +142,4 @@ exec guile -L . -s "$0" "$@"
             (get-output-string err)
             "ignoring invalid suffix rule")))))
 
-(test-end "suffix_rules")
+(test-exit "suffix-rules")

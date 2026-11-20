@@ -1,5 +1,5 @@
 (define-module (potato rules)
-  #:use-module (ice-9 pretty-print)
+  #:use-module (ice-9 format)
   #:use-module (ice-9 optargs)
   #:use-module (srfi srfi-1)
   #:use-module (srfi srfi-9)
@@ -59,7 +59,7 @@
   "Returns a lambda that appends args together as a string,
 adding intermediate spaces.  If an arg is a procedure,
 it is evaluated."
-  (lambda ()
+  (define (composer)
     ;; Loop over all the args, appending them together as a
     ;; string. Try to be smart about the types of args.
     (let loop ((args args)
@@ -94,7 +94,17 @@ it is evaluated."
              (string-append
               result
               (if need-a-space? " " "")
-              effective-arg)))))))))
+              effective-arg))))))))
+  ;; Mark the procedure as one that only builds a command string and
+  ;; has no side effects, so that it is safe to call it just to print
+  ;; the command in no-execution mode.
+  (set-procedure-property! composer 'potato-compose #t)
+  composer)
+
+(define (compose-procedure? proc)
+  "True if PROC was made by one of the compose helpers."
+  (and (procedure? proc)
+       (procedure-property proc 'potato-compose)))
 
 (define (string-compose . args)
   (cons 'default (apply base-compose args)))
@@ -241,7 +251,7 @@ installs it as the system driver.  Returns the old system driver."
         (when (>= %verbosity 3)
           (format #t "Suffix rule: ~a~A~a ~A ~a~A~a~%~!"
                   (lquo) source (rquo) (right-arrow) (lquo) target (rquo)))
-  
+
         ;; If any recipes are raw strings, we need to make them into
         ;; (cons 'default string)
         (let ((recipes2
@@ -424,7 +434,7 @@ installs it as the system driver.  Returns the old system driver."
         (loop (1+ depth) (get-parent cur))
         ;;
         depth)))
-  
+
 (define (node-depth-string node)
   (make-string (* 2 (node-depth node)) #\space))
 
@@ -483,7 +493,12 @@ installs it as the system driver.  Returns the old system driver."
 
 (define (suffix-rule-prep-automatic-variables node rule)
   (set! target-name (node-get-name node))
-  (set! target-basename (basename target-name))
+  ;; For a suffix rule, the basename is the target name with the
+  ;; rule's target suffix removed.  This matters when the target
+  ;; suffix has more than one dot, or is empty.
+  (set! target-basename
+    (string-drop-right target-name
+                       (string-length (suffix-rule-get-target rule))))
   (set! primary-prerequisite (string-append target-basename (suffix-rule-get-source rule)))
   (set! prerequisites (list primary-prerequisite))
   (set! newer-prerequisites
@@ -506,35 +521,41 @@ installs it as the system driver.  Returns the old system driver."
 ;; requiring more than one of node, automatic variables, suffix rules
 ;; and target rules
 
+;; The built-in rules are registered before the build script has had
+;; a chance to assign any makevars, so they must look up their
+;; makevars when the recipe runs, not when the rule is defined.
+(define-syntax-rule ($~ key)
+  (lambda () ($ key)))
+
 (define (add-builtins)
   #|
   (-> ".c" ""
-    (~ ($ CC) ($ CFLAGS) ($ LDFLAGS) "-o" $@ $<))
+    (~ ($~ CC) ($~ CFLAGS) ($~ LDFLAGS) "-o" $@ $<))
   (-> ".f" ""
-    (~ ($ FC) ($ FFLAGS) ($ LDFLAGS) "-o" $@ $<))
+    (~ ($~ FC) ($~ FFLAGS) ($~ LDFLAGS) "-o" $@ $<))
   (-> ".sh" ""
     (~ "cp" $< $@)
     (~ "chmod a+x" $< $@))
   |#
   (-> ".c" ".o"
-    (~ ($ CC) ($ CFLAGS) "-c" $<))
+    (~ ($~ CC) ($~ CFLAGS) "-c" $<))
   (-> ".f" ".o"
-    (~ ($ FC) ($ FFLAGS) ",c" $<))
+    (~ ($~ FC) ($~ FFLAGS) "-c" $<))
   (-> ".y" ".o"
-    (~ ($ YACC) ($ YFLAGS) $<))
+    (~ ($~ YACC) ($~ YFLAGS) $<))
   (-> ".l" ".o"
-    (~ ($ LEX) ($ LFLAGS) $<)
-    (~ ($ CC) ($ CFLAGS) "-c lex.yy.c")
+    (~ ($~ LEX) ($~ LFLAGS) $<)
+    (~ ($~ CC) ($~ CFLAGS) "-c lex.yy.c")
     "rm -f lex.yy.c"
     (~ "mv lex.yy.o" $@))
   (-> ".y" ".c"
-    (~ ($ YACC) ($ YFLAGS) $<)
+    (~ ($~ YACC) ($~ YFLAGS) $<)
     (~ "mv y.tab.c" $@))
   (-> ".l" ".c"
-    (~ ($ LEX) ($ LDFLAGS) $<)
+    (~ ($~ LEX) ($~ LFLAGS) $<)
     (~ "mv lex.yy.c" $@))
   (-> ".scm" ".go"
-    (~ ($ GUILD) "compile" ($ GFLAGS) $<)))
+    (~ ($~ GUILD) "compile" ($~ GFLAGS) $<)))
 
 (define (run-target-rule! node)
   "Runs the (singular) target rule associated with this node."
@@ -562,7 +583,7 @@ installs it as the system driver.  Returns the old system driver."
   "Runs the one-or-more suffix rules associated with this node.  It
 runs them one-by-one, quitting on the first success."
   (unless (node? node)
-    (scm-error 'wrong-type'arg "run-suffix-rules!" "Not a node: ~S" (list node) #f))
+    (scm-error 'wrong-type-arg "run-suffix-rules!" "Not a node: ~S" (list node) #f))
 
   (let ((rules (node-get-rules node))
         (children (node-get-children node)))
@@ -623,10 +644,16 @@ failure condition happens, mark the node as having failed."
                    (not (eq? 'always-execute opt)))
           ;; In no-execution mode, recipes are skipped unless they are
           ;; explicitly marked always-execute.
-          (when (and (string? recipe)
-                     (or (and (= %verbosity 2) (not (eq? 'silent opt)))
-                         (= %verbosity 3)))
-            (format #t "~A~%~!" recipe))
+          ;; Print the commands that would have been run.  Arbitrary
+          ;; procedures can't be called to see if they'd return a
+          ;; command, since they may have side effects.
+          (when (or (and (= %verbosity 2) (not (eq? 'silent opt)))
+                    (= %verbosity 3))
+            (cond
+             ((string? recipe)
+              (format #t "~A~%~!" recipe))
+             ((compose-procedure? recipe)
+              (format #t "~A~%~!" (recipe)))))
           (set-pass! node)
           (set! i (1+ i))
           (continue))
@@ -678,9 +705,14 @@ failure condition happens, mark the node as having failed."
              ((eqv? retval #f)
               (set-fail! node))
 
+             ;; A scheme procedure recipe that returns an integer,
+             ;; which is treated like an exit status.
+             ((and (integer? retval) (not (zero? retval)))
+              (set-fail! node))
+
              (else
               ;; Otherwise, this was a procedure that didn't return
-              ;; #f or a string, so it gets a pass.
+              ;; #f, a non-zero integer, or a string, so it gets a pass.
               (set-pass! node)))))
 
          (else
@@ -763,12 +795,21 @@ file exists."
   (when builtins?
     (add-builtins)))
 
-(define (create-node name parent)
-  "Constructs a tree of nodes, with name as the root node."
+(define (unbuildable? node)
+  "True if there is no way to make this node: its file doesn't exist
+and no rule applies to it."
+  (and (using-default-rule? node)
+       (not (node-get-mtime node))))
+
+(define* (create-node name parent #:optional (suffix-chain '()))
+  "Constructs a tree of nodes, with name as the root node.
+SUFFIX-CHAIN is the list of suffix rules that have been applied, one
+after the other, to get from an ancestor to this node."
   (when (and (node? parent) (> (node-depth parent) 30))
     (error "Stack overflow"))
   (let ((node (make-node name parent 'undetermined)))
     (node-set-children! node '())
+    (node-set-rules! node '())
     (node-set-rule-type! node 'default)
     ;; FIXME: here check that this name differs from all ancestor's
     ;; names
@@ -812,28 +853,40 @@ file exists."
       (for-each
        (lambda (rule)
          (let ((targ (suffix-rule-get-target rule)))
-           (when (string-suffix? targ name)
+           ;; A given suffix rule is used only once in a chain of
+           ;; suffix rules.  Otherwise a rule with an empty target
+           ;; suffix, which matches every name, would recurse forever.
+           (when (and (string-suffix? targ name)
+                      (not (memq rule suffix-chain)))
              ;; For suffix rules, there will be exactly one child per
              ;; rule and the name of the child is constructed from a
              ;; suffix and the parent's name.
-             (node-set-rules! node (cons rule (node-get-rules node)))
-             (node-set-rule-type! node 'suffix)
              (let* ((src (suffix-rule-get-source rule))
                     (targ-len (string-length targ))
                     (prereq
                      (string-append
                       (string-drop-right name targ-len)
-                      src)))
+                      src))
+                    ;; Note the recursion here.
+                    (child (create-node prereq node
+                                        (cons rule suffix-chain))))
+               ;; A suffix rule only applies if its source exists or
+               ;; can be made.  This is what lets a hand-written
+               ;; "foo.c" be used when there is also a ".y" -> ".c"
+               ;; rule, but no "foo.y".
+               (unless (unbuildable? child)
+                 (node-set-rules! node (cons rule (node-get-rules node)))
+                 (node-set-rule-type! node 'suffix)
+                 (node-set-children! node
+                                     (cons child
+                                           (node-get-children node))))))))
+       %suffix-rules)
 
-               ;; Note the recursion here.
-               (node-set-children! node
-                                   (cons (create-node prereq node)
-                                         (node-get-children node)))))))
-       %suffix-rules))
+      ;; The matching suffix rules were accumulated in reverse order.
+      ;; FIXME: First matching rule has highest priority? Or is last better?
+      (node-set-rules! node (reverse (node-get-rules node)))
+      (node-set-children! node (reverse (node-get-children node))))
 
-    ;; FIXME: First matching rule has highest priority? Or is last better?
-    (node-set-rules! node (reverse (node-get-rules node)))
-    (node-set-children! node (reverse (node-get-children node)))
     ;;(format #t "matching suffix rules ~S~%~!" (node-get-rules node))
     ;;(format #t "matching children rules ~S~%~!" (node-get-children node))
 

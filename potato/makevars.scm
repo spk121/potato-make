@@ -24,8 +24,6 @@
 ;; The lower priority level always win, unless the '-e' flag was set
 ;; If the '-e' flag is set level 1 doesn't override level 3 and 4.
 
-(define %level-name '("unknown" "script" "command-line" "makeflags" "environment" "built-in"))
-
 (define %ascii? #f)
 (define %makevars (make-hash-table))
 (define %elevate-environment? #f)
@@ -48,11 +46,7 @@ later equals signs."
 
 (define (string-append-with-spaces lst)
   "Appends the strings in lst, adding spaces in between."
-  (fold
-   (lambda (elem prev)
-     (string-append prev " " elem))
-   (car lst)
-   (cdr lst)))
+  (string-join lst " "))
 
 (define (override? old-priority new-priority)
   "The logic of whether which makemacro priority levels can override
@@ -73,7 +67,7 @@ priority."
   ;; Note that VAL can be either a string or a procedure.  If it is a
   ;; procedure, it is converted into a promise to be evaluated later.
   (let* ((val&priority (hash-ref %makevars key))
-      (old-val (if (pair? val&priority) (car val&priority) #f))
+         (old-val (if (pair? val&priority) (car val&priority) #f))
          (old-priority (if (pair? val&priority) (cdr val&priority) #f)))
     (when (or (not old-val)
               (override? old-priority new-priority))
@@ -119,7 +113,8 @@ the value of MAKEFLAGS or SHELL."
      (let* ((keyval (split-at-equals entry))
             (key (if keyval (car keyval) #f))
             (val (if keyval (cdr keyval) #f)))
-       (unless (or (string=? key "SHELL")
+       (unless (or (not (string? key))
+                   (string=? key "SHELL")
                    (string=? key "MAKEFLAGS"))
          (makevars-set key val 4))))
    (environ)))
@@ -131,44 +126,52 @@ the value of MAKEFLAGS or SHELL."
      (makevars-set (car keyval) (cdr keyval) 5))
    builtin-makevars))
 
-(define (print-makevar key)
-  (let ((val (hash-ref %makevars key)))
-    (let ((keyval-string
-           (if (zero? (string-length (car val)))
-               (string-copy key)
-               (string-append key " " (right-arrow) " " (car val)))))
-      ;; Replace any control characters in VAL, like newline or tab
+(define (makevar->string key val&priority)
+  "Format a makevar entry as a fixed-width line of text that shows
+the key, the value, and where the value came from."
+  (let* ((val (car val&priority))
+         (priority (cdr val&priority))
+         ;; A lazy makevar that hasn't been referenced yet is still a
+         ;; promise.  It must not be forced just to print it.
+         (val-string (cond
+                      ((string? val) val)
+                      ((promise? val) "<lazy>")
+                      (else (format #f "~a" val))))
+         (keyval-string
+          (if (string-null? val-string)
+              (string-copy key)
+              (string-append key " " (right-arrow) " " val-string))))
+    ;; Replace any control characters in VAL, like newline or tab
+    (set! keyval-string
+      (string-fold
+       (lambda (c str)
+         (string-append str
+                        (if (char<? c #\space)
+                            (C0 c)
+                            (string c))))
+       ""
+       keyval-string))
+    ;; Truncate
+    (when (> (string-length keyval-string) 60)
       (set! keyval-string
-        (string-fold
-         (lambda (c str)
-           (string-append str
-                          (if (char<? c #\space)
-                              (C0 c)
-                              (string c))))
-         ""
-         keyval-string))
-      ;; Truncate
-      (if (> (string-length keyval-string) 60)
-          (if %ascii?
-              (set! keyval-string
-                (string-append (substring keyval-string 0 57) "..."))
-              (set! keyval-string
-                (string-append (substring keyval-string 0 59) "…"))))
-      (let* ((space (make-string (- 64 (string-length keyval-string))
-                                 #\space))
-             (priority (cdr val))
-             (source-string (list-ref '("unknown"
-                                        "script"
-                                        "command line"
-                                        "MAKEFLAGS"
-                                        "environment"
-                                        "built-in")
-                                      priority)))
-        (display "Var:  ")
-        (display keyval-string)
-        (display space)
-        (display source-string)
-        (newline)))))
+        (if %ascii?
+            (string-append (substring keyval-string 0 57) "...")
+            (string-append (substring keyval-string 0 59) "…"))))
+    (string-append keyval-string
+                   (make-string (- 64 (string-length keyval-string))
+                                #\space)
+                   (list-ref '("unknown"
+                               "script"
+                               "command line"
+                               "MAKEFLAGS"
+                               "environment"
+                               "built-in")
+                             priority))))
+
+(define (print-makevar key)
+  (display "Var:  ")
+  (display (makevar->string key (hash-ref %makevars key)))
+  (newline))
 
 (define (dump-makevars)
   "Write out a list of the current makevars."
@@ -177,52 +180,14 @@ the value of MAKEFLAGS or SHELL."
     (display "Makevars")
     (display (default))
     (newline)
-    (let ((keyvals
-           (sort
-            (hash-map->list cons %makevars)
-            (lambda (a b)
-              (string<? (car a) (car b))))))
-      (for-each
-       (lambda (keyval)
-         (let ((key (car keyval))
-               (val (cdr keyval)))
-           (let ((keyval-string
-                  (if (zero? (string-length (car val)))
-                      (string-copy key)
-                      (string-append key " " (right-arrow) " " (car val)))))
-             ;; Replace any control characters in VAL, like newline or tab
-             (set! keyval-string
-               (string-fold
-                (lambda (c str)
-                  (string-append str
-                                 (if (char<? c #\space)
-                                     (C0 c)
-                                     (string c))))
-                  ""
-                  keyval-string))
-             ;; Truncate
-             (if (> (string-length keyval-string) 60)
-                 (if %ascii?
-                     (set! keyval-string
-                       (string-append (substring keyval-string 0 57) "..."))
-                     (set! keyval-string
-                       (string-append (substring keyval-string 0 59) "…"))))
-             (let* ((space (make-string (- 64 (string-length keyval-string))
-                                        #\space))
-                    (priority (cdr val))
-                    (source-string (list-ref '("unknown"
-                                               "script"
-                                               "command line"
-                                               "MAKEFLAGS"
-                                               "environment"
-                                               "built-in")
-                                             priority)))
-               (display "  ")
-               (display keyval-string)
-               (display space)
-               (display source-string)
-               (newline)))))
-           keyvals))))
+    (for-each
+     (lambda (keyval)
+       (display "  ")
+       (display (makevar->string (car keyval) (cdr keyval)))
+       (newline))
+     (sort (hash-map->list cons %makevars)
+           (lambda (a b)
+             (string<? (car a) (car b)))))))
 
 (define (initialize-makevars keyvals
                              environment?
@@ -300,7 +265,7 @@ or a procedure that evaluates to a string.
 in the hash table was a *promise* it will be forced,
 evaluated, and set to that result.
      If no transformer is supplied, the looked up value will be
-returned. 
+returned.
      TRANSFORMER, if
 supplied, should be a procedure of one string argument that returns a
 string. If a transformer is supplied, it will be applied to every
@@ -319,7 +284,7 @@ space-separated token in the looked-up value."
          (priority (if (pair? val&priority) (cdr val&priority) #f)))
     (if (not val)
         (if %strict
-        (error (format #f "There is no makevar for key ~a" key))
+            (error (format #f "There is no makevar for key ~a" key))
             ;; else
             (if quoted?
                 "\"\""
@@ -373,9 +338,9 @@ space-separated token in the looked-up value."
 or a procedure that evaluates to a string.
     If the value of the key
 in the hash table was a *promise*, a procedure will be returned that,
-when called, will call that promise.  If the value of the key is
+when called, will force that promise.  If the value of the key is
 a string, a procedure will be returned that, when called, returns
-that string."
+that string.  If there is no such key, #f is returned."
   (when (and (not (string? key))
              (not (procedure? key)))
     (bad-key-type "reference" (list key)))
@@ -388,14 +353,8 @@ that string."
     (if (not val)
         #f
         ;; else
-        (if (promise? val)
-            (lambda ()
-              (let ((VAL (force val)))
-                ;; FIXME: put verbose print here?
-                VAL))
-            ;; else
-            (lambda ()
-              val)))))
+        (lambda ()
+          (reference key #f)))))
 
 (define-syntax $$
   (lambda (stx)
