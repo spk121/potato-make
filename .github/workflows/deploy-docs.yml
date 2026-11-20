@@ -58,6 +58,10 @@ jobs:
 
       - name: Setup GitHub Pages
         uses: actions/configure-pages@v5
+        with:
+          # PAGES_TOKEN must have permission to enable Pages on first deployment.
+          token: ${{ secrets.PAGES_TOKEN || github.token }}
+          enablement: true
 
       - name: Upload documentation as artifact
         uses: actions/upload-pages-artifact@v3
