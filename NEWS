@@ -1,0 +1,81 @@
+Potato Make NEWS -- history of user-visible changes.
+
+Version 1.0.1
+=============
+
+* Build system and documentation
+
+  - Potato Make now has a GNU-style build system: "./configure",
+    "make", "make check", "make install" and "make distcheck" work.
+    The modules are byte-compiled when they are installed.
+  - The reference documentation is now a Texinfo manual, in
+    doc/potato-make.texi.  It replaces reference.md, and adds
+    documentation for the (potato lib) module.
+  - There is a test suite, using SRFI-64, that is run by "make check".
+  - examples/src/makefile.scm is a new example that builds a C program
+    from sources that include a file name with a space in it.
+
+* Bug fixes: rules
+
+  - The prerequisites of a target rule are built in the order they are
+    listed.  They used to be built in reverse order.
+  - A build script that has suffix rules but no target rules no longer
+    fails with a "wrong type argument" error.
+  - A suffix rule now applies only when its source file exists or can
+    be made.  Before, an existing file such as "foo.c" could not be
+    used as a prerequisite when some suffix rule, such as ".y" to
+    ".c", could in theory have made it.  This broke most uses of the
+    --builtins option.
+  - A suffix rule with an empty target suffix no longer causes a
+    "Stack overflow" error when its source file has no target rule.
+  - In suffix rules, $< and $* are correct when the target suffix
+    contains more than one period or is empty.
+  - The built-in suffix rules look up their makevars when they are
+    run, so assignments in the build script, such as (:= CC "clang"),
+    affect them.
+  - The built-in ".f" to ".o" rule passes "-c" to the compiler,
+    instead of ",c".
+  - The built-in ".l" to ".c" rule uses LFLAGS instead of LDFLAGS.
+  - A recipe procedure that returns a non-zero integer is a failure,
+    as documented.
+  - With --no-execution, commands made by the recipe helpers are
+    printed, not just commands given as literal strings.
+
+* Bug fixes: makevars
+
+  - With --verbosity=3, assigning a makevar with ?= no longer raises
+    a "wrong type argument" error.  Neither does dump-makevars.
+  - Referencing an empty makevar with a transformer procedure returns
+    an empty string instead of raising an error.
+  - The procedure returned by $$ and reference-func returns a string
+    even when the makevar was lazily assigned a procedure.
+
+* Bug fixes: command line
+
+  - A makevar assignment on the command line may contain more than one
+    equals sign, as in CFLAGS=-DDEBUG=1.
+  - The option words in MAKEFLAGS, such as "silent", are honored with
+    --elevate-environment, not just with --environment.
+  - Each call to initialize starts from the default verbosity, instead
+    of inheriting it from an earlier call.
+  - --help shows the ASCII option as -A, which is what is accepted.
+  - --version prints a space between the name and the version.
+  - The messages that report the result of a top-level target honor
+    --ascii.
+
+* Bug fixes: (potato lib)
+
+  - words, strip, and the procedures built on them treat a quote
+    character inside quotes of the other kind as an ordinary
+    character, so "it's" is handled properly.
+  - file-abspath no longer returns a relative name for a path that has
+    ".." at the root, and it removes repeated and trailing slashes.
+  - wildcard does not match hidden files unless the pattern begins
+    with a period.
+  - Importing (potato lib) no longer warns that it overrides the core
+    binding sort-list.
+
+Version 1.0
+===========
+
+Initial release.

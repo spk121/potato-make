@@ -19,12 +19,12 @@
       (string #\escape #\[ #\0 #\m)
       ""))
 
-(define (bold) 
+(define (bold)
   (if %fancy
       (string #\escape #\[ #\1 #\m)
       ""))
 
-(define (underline) 
+(define (underline)
   (if %fancy
       (string #\escape #\[ #\4 #\m)
       ""))
@@ -92,11 +92,11 @@
   (if %fancy (string #\escape #\[ #\G) "\n"))
 
 #|
-in quiet mode it is just 
+in quiet mode it is just
 ☐ target -> parent (when building)
 ☒ target -> parent   (on pass)
 ⚠ target -> parent   (on fail but continue)
-🛑 target -> parent  (on stop) 
+🛑 target -> parent  (on stop)
 ∎                    (on successful completion)
 
 in normal mode it is

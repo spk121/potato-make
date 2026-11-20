@@ -1,16 +1,15 @@
-#!/usr/bin/env sh
-exec guile -L . -s "$0" "$@"
-!#
+;;; target-rules.scm -- part of the Potato Make test suite.
 
 (use-modules (potato make)
              (srfi srfi-1)
-             (srfi srfi-64))
+             (srfi srfi-64)
+             (tests common))
 
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; TARGET RULES
 
-(test-begin "target_rules")
+(test-begin "target-rules")
 
 ;; These stubs override the driver that calls
 ;; 'system' so we can instead just investigate
@@ -59,7 +58,9 @@ exec guile -L . -s "$0" "$@"
     (initialize '("test" "foo.exe"))
     (: "foo.exe" '("foo.c")
        (lambda ()
-         ("cc -o foo.exe foo.c")))
+         "cc -o foo.exe foo.c"))
+    (: "foo.c" '() #t)
+    (set! %cmd #f)
     (execute)
     %cmd))
 
@@ -69,6 +70,8 @@ exec guile -L . -s "$0" "$@"
     (initialize '("test" "foo.exe"))
     (: "foo.exe" '("foo.c")
        (~ "cc -o foo.exe foo.c"))
+    (: "foo.c" '() #t)
+    (set! %cmd #f)
     (execute)
     %cmd))
 
@@ -105,6 +108,8 @@ exec guile -L . -s "$0" "$@"
     (initialize '("test" "foo.exe"))
     (: "foo.exe" '("foo.c")
        (~ "cc -o" $@ $<))
+    (: "foo.c" '() #t)
+    (set! %cmd #f)
     (execute)
     %cmd))
 
@@ -123,22 +128,26 @@ exec guile -L . -s "$0" "$@"
 ;; Non-nominal: with a failing system driver and no ignore option,
 ;; execute should fail the target.
 (test-equal "target rule check failure of system call"
-  #f
+  '(#f "cc -o foo.exe foo.c")
   (begin
     (initialize '("test" "foo.exe"))
     (: "foo.exe" '("foo.c")
        (~ "cc -o" $@ $<))
-    (execute)))
+    (: "foo.c" '() #t)
+    (set! %cmd #f)
+    (list (execute) %cmd)))
 
 ;; Non-nominal: a recipe procedure that returns #f is treated as failure.
 (test-equal "target rule check failure of scheme procedure"
-  #f
-  (begin
+  '(#f #t)
+  (let ((ran? #f))
     (initialize '("test" "foo.exe"))
     (: "foo.exe" '("foo.c")
        (lambda ()
+         (set! ran? #t)
          #f))
-    (execute)))
+    (: "foo.c" '() #t)
+    (list (execute) ran?)))
 
 ;; Non-nominal: first recipe fails, but per-recipe ignore (~-) should
 ;; allow the next recipe to run and the overall target to pass.
@@ -221,4 +230,4 @@ exec guile -L . -s "$0" "$@"
     (and (execute)
          (string=? %cmd "cc -o foo.exe foo.c"))))
 
-(test-end "target_rules")
+(test-exit "target-rules")

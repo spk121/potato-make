@@ -1,9 +1,9 @@
-#!/usr/bin/env sh
-exec guile -L . -s "$0" "$@"
-!#
+;;; configure.scm -- part of the Potato Make test suite.
+
 (use-modules (potato make)
              (potato configure)
-             (srfi srfi-64))
+             (srfi srfi-64)
+             (tests common))
 
 (test-begin "configure")
 
@@ -65,4 +65,4 @@ exec guile -L . -s "$0" "$@"
      (cons "mandir" (reference "mandir" #f))
      (cons "srcdir" (reference "srcdir" #f)))))
 
-(test-end "configure")
+(test-exit "configure")

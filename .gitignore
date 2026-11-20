@@ -1,7 +1,47 @@
-*.ss~
-*.ss#*
-.#*.ss
+# Editor backup and lock files
+*~
+\#*
+.\#*
 
-*.scm~
-*.scm#*
-.#*.scm
+# Autotools output
+/Makefile
+/Makefile.in
+/aclocal.m4
+/autom4te.cache/
+/build-aux/
+/config.log
+/config.status
+/configure
+/pre-inst-env
+/doc/Makefile
+/doc/Makefile.in
+
+# Compiled Guile modules
+*.go
+
+# Test results
+*.log
+*.trs
+
+# Documentation output
+/doc/potato-make.html/
+/doc/stamp-vti
+/doc/version.texi
+*.info
+*.dvi
+*.pdf
+*.ps
+*.aux
+*.cp
+*.cps
+*.fn
+*.fns
+*.toc
+
+# Distribution tarballs
+/potato-make-*/
+*.tar.gz
+
+# Products of building the C examples
+*.o
+/examples/src/hello

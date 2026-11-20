@@ -14,7 +14,6 @@
             firstword
             lastword
             wordlist
-            sort-list
             file-dir
             file-notdir
             file-suffix
@@ -25,7 +24,9 @@
             wildcard
             file-realpath
             file-abspath
-            strip-quotes))
+            strip-quotes)
+  ;; 'sort-list' is also the name of a core Guile procedure.
+  #:replace (sort-list))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; INTERNAL HELPERS
@@ -56,6 +57,8 @@
 For each non-quote-delimiter character, call (PROC char in-quote? acc),
 where in-quote? is #t when inside single or double quotes, #f otherwise.
 Quote delimiter characters themselves are consumed and not passed to PROC.
+A quote character of one kind that appears inside quotes of the other
+kind is an ordinary character.
 Unmatched quotes remain active to the end of the string.
 Returns the final accumulator."
   (let ((len (string-length text)))
@@ -64,10 +67,10 @@ Returns the final accumulator."
           acc
           (let ((c (string-ref text i)))
             (cond
-              ((char=? c #\")
-               (loop (+ i 1) (if (eq? quote-state 'double) #f 'double) acc))
-              ((char=? c #\')
-               (loop (+ i 1) (if (eq? quote-state 'single) #f 'single) acc))
+              ((and (char=? c #\") (not (eq? quote-state 'single)))
+               (loop (+ i 1) (if quote-state #f 'double) acc))
+              ((and (char=? c #\') (not (eq? quote-state 'double)))
+               (loop (+ i 1) (if quote-state #f 'single) acc))
               (else
                (loop (+ i 1) quote-state
                      (proc c (if quote-state #t #f) acc)))))))))
@@ -131,7 +134,10 @@ Does not handle character classes."
       (string-index str #\?)))
 
 (define (glob-one pattern)
-  "Expand a single glob PATTERN into a sorted list of matching paths."
+  "Expand a single glob PATTERN into a sorted list of matching paths.
+Only the last component of PATTERN may contain wildcards.  As in the
+shell, names that begin with a dot are matched only when the last
+component of PATTERN also begins with a dot."
   (if (not (has-glob-chars? pattern))
       ;; No wildcards: just test existence
       (if (file-exists? pattern)
@@ -140,7 +146,8 @@ Does not handle character classes."
       (let* ((sep (string-rindex pattern #\/))
              (dir-part (if sep (substring pattern 0 (+ sep 1)) ""))
              (file-pat (if sep (substring pattern (+ sep 1)) pattern))
-             (dir-path (if (string-null? dir-part) "." dir-part)))
+             (dir-path (if (string-null? dir-part) "." dir-part))
+             (hidden? (string-prefix? "." file-pat)))
         (catch #t
           (lambda ()
             (let* ((d (opendir dir-path))
@@ -151,6 +158,8 @@ Does not handle character classes."
                             acc
                             (loop (if (and (not (string=? entry "."))
                                            (not (string=? entry ".."))
+                                           (or hidden?
+                                               (not (string-prefix? "." entry)))
                                            (glob-match? file-pat entry))
                                       (cons (string-append dir-part entry)
                                             acc)
@@ -163,13 +172,16 @@ Does not handle character classes."
 ;; PATH NORMALIZATION
 
 (define (normalize-path path)
-  "Remove . and resolve .. components from PATH."
+  "Lexically clean up the absolute file name PATH: remove empty and
+`.` components, and resolve `..` components without going above the
+root."
   (let loop ((parts (string-split path #\/))
              (acc '()))
     (cond
       ((null? parts)
-       (string-join (reverse acc) "/"))
-      ((string=? (car parts) ".")
+       (string-append "/" (string-join (reverse acc) "/")))
+      ((or (string-null? (car parts))
+           (string=? (car parts) "."))
        (loop (cdr parts) acc))
       ((string=? (car parts) "..")
        (loop (cdr parts) (if (null? acc) acc (cdr acc))))

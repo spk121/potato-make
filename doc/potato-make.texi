@@ -1,0 +1,1230 @@
+\input texinfo   @c -*-texinfo-*-
+@c %**start of header
+@setfilename potato-make.info
+@documentencoding UTF-8
+@include version.texi
+@settitle Potato Make @value{VERSION}
+@c %**end of header
+
+@copying
+This manual is for Potato Make, version @value{VERSION}, a build tool
+written in Guile Scheme.
+
+Copyright @copyright{} 2017--2026 Michael L. Gran
+
+@quotation
+Permission is hereby granted, free of charge, to any person obtaining
+a copy of this software and associated documentation files (the
+``Software''), to deal in the Software without restriction, including
+without limitation the rights to use, copy, modify, merge, publish,
+distribute, sublicense, and/or sell copies of the Software, and to
+permit persons to whom the Software is furnished to do so, subject to
+the following conditions:
+
+The above copyright notice and this permission notice shall be
+included in all copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED ``AS IS'', WITHOUT WARRANTY OF ANY KIND,
+EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND
+NONINFRINGEMENT.  IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS
+BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN
+ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
+CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+@end quotation
+@end copying
+
+@dircategory Software development
+@direntry
+* Potato Make: (potato-make).   A build tool written in Guile Scheme.
+@end direntry
+
+@titlepage
+@title Potato Make
+@subtitle A build tool written in Guile Scheme
+@subtitle Version @value{VERSION}, updated @value{UPDATED}
+@author Michael L. Gran
+@page
+@vskip 0pt plus 1filll
+@insertcopying
+@end titlepage
+
+@contents
+
+@ifnottex
+@node Top
+@top Potato Make
+
+This manual is for Potato Make, version @value{VERSION}, a build tool
+written in Guile Scheme.
+@end ifnottex
+
+@menu
+* Introduction::                What Potato Make is.
+* Installation::                Building and installing the library.
+* Writing a Build Script::      The boilerplate, and a first example.
+* Command-Line Arguments::      Options, makevars and targets.
+* Environment Variables::       How the environment affects a build.
+* Rules::                       Target rules and suffix rules.
+* Recipe Helpers::              Composing shell commands.
+* Automatic Variables::         The target and prerequisites of a recipe.
+* Makevars::                    The variables of a build script.
+* The Build Algorithm::         How targets get built.
+* Built-in Rules and Makevars:: What @option{--builtins} provides.
+* Extensions::                  Adding command-line options.
+* Text and File Name Functions:: The @code{(potato lib)} module.
+* Testing Build Scripts::       Replacing the shell.
+* Procedure Index::
+@end menu
+
+@node Introduction
+@chapter Introduction
+
+Potato Make is a Scheme library that aims to simplify the task of
+maintaining, updating, and regenerating programs.  It is inspired by
+the @command{make} utility in IEEE Std 1003.1-2017 (POSIX).  With this
+library, you can write a build script in Guile Scheme.
+
+Like POSIX @command{make}, these scripts update files that are derived
+from other files.  A build script typically describes how a file is
+built from shell commands, and it describes the relationships between
+the components to be built, so that they are built in order.  The
+script checks the prerequisites of a target, and if the prerequisites
+are newer than the target, it rebuilds the target.
+
+There are two types of rules that a build script can contain.
+
+@enumerate
+@item
+Target rules, which describe how a specific named file is to be built
+from prerequisites using a set of shell commands.
+@item
+Suffix rules, which generically describe how to convert files with
+one file name suffix into files with another file name suffix.
+@end enumerate
+
+A build script makes use of a custom variable type which can be set
+either in the script, by environment variables, or in command-line
+arguments.  They are called @dfn{makevars}, to reduce confusion with
+standard Scheme variables.
+
+@node Installation
+@chapter Installation
+
+Potato Make requires GNU Guile, version 2.2 or 3.0.  It is built with
+the usual GNU build system commands.
+
+@example
+./configure
+make
+make check
+make install
+@end example
+
+When building from a checkout of the Git repository rather than from
+a release tarball, first create the @file{configure} script by running
+@command{autoreconf -vif}.  This requires Autoconf, Automake, Texinfo,
+and Guile's development files.
+
+The Scheme modules are installed beneath the installation prefix, in
+@file{@var{prefix}/share/guile/site/@var{version}}, and the compiled
+modules in @file{@var{prefix}/lib/guile/@var{version}/site-ccache}.
+Guile only searches the directories beneath its own prefix, so if
+Guile is installed in @file{/usr}, configure Potato Make to match.
+
+@example
+./configure --prefix=/usr
+@end example
+
+Otherwise, add the directories to the @env{GUILE_LOAD_PATH} and
+@env{GUILE_LOAD_COMPILED_PATH} environment variables.
+
+Potato Make can also be used without installing it.  The
+@file{pre-inst-env} script in the build directory runs a command with
+the uninstalled modules on Guile's load path.
+
+@example
+./pre-inst-env guile -s examples/hello.scm
+@end example
+
+@node Writing a Build Script
+@chapter Writing a Build Script
+
+To write a build script with this library, add the following
+boilerplate code at the top of an executable Scheme script.
+Throughout this manual the script is presumed to be named
+@file{makefile.scm}; however, you may choose any name.
+
+@example
+#!/usr/bin/env sh
+exec guile -s "$0" "$@@"
+!#
+
+(use-modules (potato make))
+(initialize)
+@end example
+
+Rules go between @code{initialize} and @code{execute}.  Add this at
+the bottom of the script:
+
+@example
+(execute)
+@end example
+
+@code{initialize} parses arguments and prepares the build context.
+It reads the process command line and applies options, makevar
+assignments (@samp{KEY=VALUE}), and target names.  @code{execute}
+then builds the selected targets.
+
+Here is a complete, simple example.
+
+@example
+#!/usr/bin/env sh
+exec guile -s "$0" "$@@"
+!#
+
+(use-modules (potato make))
+(initialize)
+(:= CC "gcc")
+(:= CFLAGS "-g -O2")
+
+(: "all" '("foo"))
+(: "foo" '("foo.o" "bar.o")
+  (~ ($ CC) "-o" $@@ $^))
+(-> ".c" ".o"
+  (~ ($ CC) "-c" $<))
+(execute)
+@end example
+
+@deffn Procedure initialize [arguments]
+Set up the options, rules, and makevars.  Any rules and makevars from
+an earlier call are discarded, and every option returns to its
+default.
+
+If @var{arguments} is not given, the options, makevars, and targets
+come from the command line of the process.  Otherwise it is a list of
+strings to use in place of the command line.  The first string is the
+name of the script, and then any combination of options, makevar
+assignments and targets may follow.
+
+@example
+(initialize '("makefile.scm" "--verbosity=3" "CC=gcc" "all"))
+@end example
+
+If @var{arguments} is the empty list, the program name is taken from
+@code{(program-arguments)}, and there are no options, makevars, or
+targets.
+
+@example
+;; ignore all command line arguments except the script name
+(initialize '())
+@end example
+
+The return value is the list of targets named in the arguments.
+@end deffn
+
+@deffn Procedure execute [#:targets targets]
+Build targets.  @var{targets}, if provided, is a list of the names of
+the targets to build.  Otherwise, the targets named in the arguments
+to @code{initialize} are built.  If there were none, the first target
+rule in the script is built.
+
+The return value is @code{#t} if every target was built
+successfully, and @code{#f} otherwise.  To have the exit status of
+the script report whether the build succeeded, end the script with
+
+@example
+(exit (execute))
+@end example
+@end deffn
+
+@node Command-Line Arguments
+@chapter Command-Line Arguments
+
+A script that calls @code{initialize} accepts a command line of this
+form.
+
+@example
+makefile.scm [-hvVeEbknAS] [var=value @dots{}] [target_name @dots{}]
+@end example
+
+@table @asis
+@item @option{-h}, @option{--help}
+Display help and exit.
+
+@item @option{-v}, @option{--version}
+Display the version and exit.
+
+@item @option{-V @var{level}}, @option{--verbosity=@var{level}}
+Choose the verbosity of the output: 0 is silent, 1 is terse, 2 is
+the default, and 3 is verbose.
+
+@item @option{-e}, @option{--environment}
+Import environment variables as makevars.
+
+@item @option{-E}, @option{--elevate-environment}
+Import environment variables as makevars, and let them, along with
+makevars from the command line, take precedence over script
+assignments.
+
+@item @option{-b}, @option{--builtins}
+Add the built-in makevars and suffix rules.  @xref{Built-in Rules and
+Makevars}.
+
+@item @option{--ignore-errors}
+Ignore recipe failures and continue.
+
+@item @option{-k}, @option{--continue-on-error}
+Continue building later top-level targets after a failure.
+
+@item @option{-n}, @option{--no-execution}
+Skip normal recipe execution; run only the recipes marked
+@code{always-execute}.  The commands that were skipped are printed.
+
+@item @option{-A}, @option{--ascii}
+Use ASCII-only output and no colors.
+
+@item @option{-S}, @option{--strict}
+Raise an error when an unset makevar is referenced.
+
+@item @var{var}=@var{value}
+Set a makevar from the command line.  The assignment is split at the
+first equals sign, so the value may itself contain equals signs, as in
+@samp{CFLAGS=-DDEBUG=1}.
+
+@item @var{target_name}
+Name a target to build.  If no target is named, the first target rule
+defined in the script is used.
+@end table
+
+Note that POSIX @command{make}, by default, adds in environment
+variables and built-in rules.  With this library, these must be
+requested with command-line arguments.  This makes the tool more
+appropriate for generating @emph{reproducible builds}.
+
+Some examples:
+
+@example
+./makefile.scm
+./makefile.scm all
+./makefile.scm CC=clang CFLAGS='-O3 -g' all
+./makefile.scm --environment --verbosity=3 test
+./makefile.scm --continue-on-error bad-target good-target
+./makefile.scm --no-execution all
+@end example
+
+@node Environment Variables
+@chapter Environment Variables
+
+Certain environment variables affect the execution of a build script.
+
+@table @env
+@item LANG
+Affects the current locale.
+
+@item MAKEFLAGS
+When @option{--environment} or @option{--elevate-environment} is
+enabled, @env{MAKEFLAGS} is parsed as space-separated tokens.  The
+following word tokens are recognized, and have the same effect as the
+corresponding command-line options: @samp{silent}, @samp{terse},
+@samp{verbose}, @samp{builtins}, @samp{ascii}, @samp{ignore-errors},
+@samp{continue-on-error}, @samp{strict}, and @samp{no-execution}.
+Options on the command line take precedence.  Tokens of the form
+@samp{VAR=VALUE} are imported as makevars, except for @samp{SHELL}
+and @samp{MAKEFLAGS} themselves.
+
+@item SHELL
+The @env{SHELL} environment variable is always ignored and never
+imported as a makevar.
+@end table
+
+All other environment variables, including those with null values,
+initialize makevars when @option{--environment} or
+@option{--elevate-environment} is active.
+
+@node Rules
+@chapter Rules
+
+The purpose of a build script is to run rules, which describe how
+programs act on prerequisites to create targets.  There are two types
+of rules: target rules and suffix rules.
+
+@menu
+* Target Rules::                Building one named target.
+* Suffix Rules::                Building by file name suffix.
+* Recipes::                     The commands of a rule.
+@end menu
+
+@node Target Rules
+@section Target Rules
+
+@deffn Procedure target-rule name [prerequisites] recipe @dots{}
+@deffnx Procedure : name [prerequisites] recipe @dots{}
+Add a target rule to the list of target rules.
+
+@var{name} is a string that names the target.  If this rule is being
+used to create a file, @var{name} is the name of the file to be
+output.
+
+@var{prerequisites}, if provided, is a list of strings.  Each is the
+name of a target that must be built, or a file that must exist, before
+this target is attempted.  It may be the empty list, indicating that
+there are no prerequisites.
+
+The @var{recipe}s are executed in order to create the target.
+@xref{Recipes}.  If there is no recipe at all, the rule always passes
+once its prerequisites have been built.
+
+If more than one target rule is defined for the same name, the one
+defined last is used.
+@end deffn
+
+Here are some example target rules.  A recipe as a string to be
+executed by the shell:
+
+@example
+(: "foo.o" '("foo.c")
+  "cc -c foo.c")
+@end example
+
+A recipe as a procedure:
+
+@example
+(: "clean-foo" '()
+  (lambda ()
+    (delete-file "foo.o")))
+@end example
+
+A recipe as a procedure that returns @code{#f} to indicate failure:
+
+@example
+(: "recent" '()
+  (lambda ()
+    (if condition #t #f)))
+@end example
+
+A recipe as a procedure returning a string to be executed by the
+shell:
+
+@example
+(: "foo.o" '("foo.c")
+  (lambda ()
+    (format #f "cc ~A -c foo.c" some-flags)))
+@end example
+
+A recipe using the recipe helpers, makevars, and automatic variables,
+which create a string to be executed by the shell:
+
+@example
+(: "foo.o" '("foo.c" "foo.h")
+  (~ ($ CC) ($ CFLAGS) "-c" "-o" $@@ $<))
+@end example
+
+A recipe as a boolean, to indicate success or failure without doing
+any processing.  For example, the rule below tells Potato Make that
+the file @file{foo.c} exists without actually testing for it.
+
+@example
+(: "foo.c" '() #t)
+@end example
+
+A rule with no recipe at all is shorthand for the recipe @code{#t}.
+This is used in prerequisite-only target rules:
+
+@example
+(: "all" '("foo.exe"))
+(: "all" '("foo.exe") #t)   ;; equivalent
+@end example
+
+@node Suffix Rules
+@section Suffix Rules
+
+Unlike target rules, which are for one specific target and may have
+many prerequisites, suffix rules describe how to create a target from
+a single prerequisite, with the assumption that they have the same
+base name and differ only in their file name suffixes.  They are
+applied to prerequisites, and to top-level targets, that have no
+target rule of their own.
+
+For example, one could have a suffix rule to convert a @file{.c} file
+into a @file{.o} file.
+
+@deffn Procedure suffix-rule source-suffix target-suffix recipe @dots{}
+@deffnx Procedure -> source-suffix target-suffix recipe @dots{}
+Add a suffix rule to the list of suffix rules.
+
+@var{source-suffix} is a string that is the file name suffix of the
+file used to create the target.  Commonly, this string begins with a
+period.
+
+@var{target-suffix} is a string that is the file name suffix of the
+file to be created.  It may be the empty string, indicating that the
+target is just the base name with no suffix.
+
+The @var{recipe}s are executed in order to create the target.
+@xref{Recipes}.
+
+A suffix rule whose source and target suffixes are identical is
+ignored, with a warning.
+@end deffn
+
+A suffix rule applies to a target only if the corresponding source
+file exists, or can itself be made by some other rule.  So with rules
+for both @samp{.y} to @samp{.c} and @samp{.c} to @samp{.o}, the
+target @file{foo.o} can be built from a hand-written @file{foo.c}, or
+from a @file{foo.y} by way of a generated @file{foo.c}.  If several
+suffix rules apply to a target, they are tried in turn until one
+succeeds.
+
+Example suffix rules:
+
+@example
+(-> ".c" ".o"
+    (~ ($ CC) ($ CFLAGS) "-c" "-o" $@@ $<))
+
+(-> ".sh" ""
+    (~ "cp" $< $@@)
+    (~ "chmod a+x" $@@))
+@end example
+
+@defvar %suffix-rules
+The list of suffix rules that have been defined in the build script,
+in an internal format.
+@end defvar
+
+@node Recipes
+@section Recipes
+
+A recipe, in a target rule or in a suffix rule, can be a string, a
+procedure, a boolean, or a pair produced by one of the recipe helpers.
+
+If the recipe is a string, it is passed to the @code{system} procedure
+for execution by the shell.  If the command exits with a non-zero
+status, the recipe has failed.
+
+If the recipe is a procedure, it is called with no arguments.  If it
+returns @code{#f} or a non-zero integer, the recipe has failed.  If
+it returns a string, that string is passed to @code{system} and is
+processed as above.  Any other return value indicates success.
+
+If the recipe is @code{#t}, it always passes without executing
+anything.  If the recipe is @code{#f}, it always fails.
+
+If the recipe is a pair, as returned by one of the recipe helpers, the
+@sc{car} is one of the symbols @code{default}, @code{ignore-error},
+@code{continue-on-error}, @code{silent}, or @code{always-execute},
+and the @sc{cdr} is a string or procedure as above.  The symbol
+modifies how the recipe is run.  @xref{Recipe Helpers}.
+
+When a recipe fails, the remaining recipes of the rule are not run
+and the target has failed, unless errors are being ignored.
+
+@node Recipe Helpers
+@chapter Recipe Helpers
+
+The recipe helpers build the command line of a recipe by concatenating
+elements, inserting spaces between them.
+
+@example
+(~ "string" (lambda () "string") ($ KEY) $@@ 100)
+@end example
+
+Elements can be
+
+@itemize
+@item
+strings,
+@item
+procedures of no arguments that return strings, such as the automatic
+variables,
+@item
+makevar references,
+@item
+or anything whose representation as created by @code{display} makes
+sense.
+@end itemize
+
+Any procedures are called lazily, when the rule is executed.  Empty
+strings are skipped, so they don't introduce extra spaces.
+
+Each helper returns a pair whose @sc{car} is a symbol tag and whose
+@sc{cdr} is a procedure that produces the composed string.
+
+@deffn Procedure string-compose element @dots{}
+@deffnx Procedure ~ element @dots{}
+Compose a recipe with the tag @code{default}.
+@end deffn
+
+@deffn Procedure ignore-error-compose element @dots{}
+@deffnx Procedure ~- element @dots{}
+Like @code{~}, but with the tag @code{ignore-error}.  If the command
+fails, the failure is ignored and the rule continues with its next
+recipe.
+@end deffn
+
+@deffn Procedure continue-on-error-compose element @dots{}
+@deffnx Procedure ~k element @dots{}
+Like @code{~}, but with the tag @code{continue-on-error}.  After a
+failure, the rule continues with its next recipe instead of stopping.
+@end deffn
+
+@deffn Procedure silent-compose element @dots{}
+@deffnx Procedure ~@@ element @dots{}
+Like @code{~}, but with the tag @code{silent}.  The command is not
+printed before it is run, except with verbose output.
+@end deffn
+
+@deffn Procedure always-execute-compose element @dots{}
+@deffnx Procedure ~+ element @dots{}
+Like @code{~}, but with the tag @code{always-execute}.  The command
+is run even if the @option{--no-execution} option was chosen.
+@end deffn
+
+@node Automatic Variables
+@chapter Automatic Variables
+
+Recipes can use the following automatic variables.  They are
+procedures of no arguments, whose values are set before the recipes
+of a rule are run.
+
+@table @code
+@item $@@
+@itemx target-name
+The name of the target.
+
+@item $*
+@itemx target-basename
+The name of the target with its file name suffix removed.  In a
+suffix rule, it is the suffix of the rule that is removed.
+
+@item $<
+@itemx primary-prerequisite
+The first prerequisite.
+
+@item $^
+The prerequisites, as a single space-separated string.
+
+@item $$^
+@itemx prerequisites
+The prerequisites, as a Scheme list of strings.
+
+@item $?
+The prerequisites that are files newer than the target file, as a
+single space-separated string.  If the target file doesn't exist, it
+is all of the prerequisites.
+
+@item $$?
+@itemx newer-prerequisites
+The same, as a Scheme list of strings.
+@end table
+
+Since they are procedures, call them to get their values in Scheme
+code, as in @code{($@@)}.  The recipe helpers call them for you.
+
+@example
+(: "archive.tar" '("a.txt" "b.txt")
+   (~ "tar cf" $@@ $^)
+   (lambda ()
+     (format #t "archived ~a files~%" (length ($$^)))))
+@end example
+
+These are global variables, and are not thread safe.
+
+@node Makevars
+@chapter Makevars
+
+Build scripts may take advantage of a special variable type called a
+makevar.  In Scheme terms, makevars are entries in a hash table that
+have special accessor syntax.
+
+@itemize
+@item
+The makevar names --- the keys --- are strings.
+@item
+The makevar values are strings, or procedures of no arguments that
+return strings.
+@end itemize
+
+There are five sources for makevars, listed from highest to lowest
+priority.
+
+@enumerate
+@item
+Script assignments (@code{:=}, @code{?=})
+@item
+Command-line assignments (@samp{KEY=VALUE})
+@item
+@env{MAKEFLAGS} assignments (when @option{--environment} or
+@option{--elevate-environment} is enabled)
+@item
+Environment variables (when @option{--environment} or
+@option{--elevate-environment} is enabled)
+@item
+Built-ins (when @option{--builtins} is enabled)
+@end enumerate
+
+A value from a higher-priority source replaces a value from a
+lower-priority source.
+
+This priority is modified by the @option{--elevate-environment}
+option.  When it is set, script assignments @emph{do not} override
+values from the command line, @env{MAKEFLAGS}, or the environment.
+They @emph{do} still override built-ins.
+
+Some notes:
+
+@itemize
+@item
+@env{SHELL} and @env{MAKEFLAGS} are never imported as makevars.
+@item
+In strict mode (@option{--strict}), referencing an unset makevar
+raises an error.
+@item
+Without strict mode, an unset makevar is the empty string.  This is
+because it is a common practice in makefiles to use variables that
+may or may not be defined by the environment.
+@end itemize
+
+The library provides the following procedures and syntax for makevars.
+
+@deffn Procedure assign key [val]
+Set a makevar.  @var{key} is a string, or a procedure of no arguments
+that returns a string.  Likewise @var{val}.  If either is a procedure,
+it is called immediately.  If @var{val} is not given, the empty
+string is used.  A @var{val} that is neither a string nor a procedure
+is converted to a string as if by @code{display}.
+@end deffn
+
+@deffn Syntax := key [val]
+A syntax version of @code{assign}, where @var{key} is an unquoted
+symbol.
+
+@example
+(:= CC "gcc")  @equiv{}  (assign "CC" "gcc")
+@end example
+@end deffn
+
+@deffn Procedure lazy-assign key [val]
+Like @code{assign}, except that if @var{val} is a procedure, it is
+not called until the first time the makevar is referenced.  Its
+result then becomes the value of the makevar.
+@end deffn
+
+@deffn Syntax ?= key [val]
+A syntax version of @code{lazy-assign}, where @var{key} is an
+unquoted symbol.
+
+@example
+(?= DATE (lambda () (strftime "%F" (localtime (current-time)))))
+@end example
+@end deffn
+
+@deffn Procedure reference key quoted? [transformer]
+Look up the makevar @var{key} and return its value as a string.
+@var{key} is a string, or a procedure of no arguments that returns a
+string.
+
+If the makevar is not set, the empty string is returned, or an error
+is raised in strict mode.
+
+If @var{quoted?} is true, the value is returned wrapped in double
+quotes.
+
+The optional @var{transformer} is a procedure that takes a string and
+returns a string.  It is applied to every whitespace-separated word
+in the value, and the results are joined with spaces.
+@end deffn
+
+@deffn Syntax $ key [transformer]
+A syntax version of @code{reference}, where @var{key} is an unquoted
+symbol.
+
+@example
+($ CC)  @equiv{}  (reference "CC" #f)
+@end example
+@end deffn
+
+@deffn Syntax Q key [transformer]
+The same as @code{$}, but the value is wrapped in double quotes.
+
+@example
+(Q CC)  @equiv{}  (reference "CC" #t)
+@end example
+@end deffn
+
+@deffn Procedure reference-func key
+Return a procedure of no arguments that, when called, looks up the
+makevar @var{key} as @code{reference} does.  If the makevar is not
+set, return @code{#f}.
+@end deffn
+
+@deffn Syntax $$ key
+A syntax version of @code{reference-func}, where @var{key} is an
+unquoted symbol.
+
+@example
+($$ CC)  @equiv{}  (reference-func "CC")
+@end example
+@end deffn
+
+Note that @code{($ CC)} is evaluated where it appears.  In a recipe
+helper, that is when the rule is defined, so a makevar should be
+assigned before the rules that use it.  To look a makevar up only
+when the recipe runs, use a procedure, such as the one returned by
+@code{($$ CC)}.
+
+@defvar %makevars
+The hash table of makevars, in the @code{(potato makevars)} module.
+You are not meant to access it directly, but with the procedures
+above.  Each value is a pair: the @sc{car} is a string or a promise,
+and the @sc{cdr} is the priority level, an integer.
+@end defvar
+
+@node The Build Algorithm
+@chapter The Build Algorithm
+
+The top-level targets are given on the command line.  If none are,
+the first target rule in the script is used.
+
+For each top-level target, a tree of prerequisites is created.  If a
+target has a target rule, its children are the prerequisites of that
+rule.  Otherwise, if its name ends with the target suffix of one or
+more suffix rules, its children are the files that would fulfill those
+suffix rules.  This continues until the tree is populated.
+
+Then the modification times are found for all of the targets that
+exist as files.
+
+A node is considered up to date if it has a modification time, it has
+children, and none of its children are newer than it is.  Up-to-date
+nodes pass without running their recipes.  A target with no
+prerequisites is never up to date, so its recipes are always run.
+
+In a depth-first traversal, each node is built:
+
+@itemize
+@item
+For a @strong{target rule}, all of the children must pass, in order,
+before the recipes of the rule are run.
+@item
+For @strong{suffix rules}, the recipes of a rule are run as soon as
+its child passes, trying each suffix rule in turn.
+@item
+A node with no rule at all passes if it is a file that exists.
+@end itemize
+
+If a recipe fails:
+
+@itemize
+@item
+With @option{--ignore-errors}, the failure is ignored and the build
+continues.
+@item
+With @option{--continue-on-error}, the top-level target has failed,
+and the build proceeds to the next top-level target.
+@item
+Otherwise, the build stops.
+@end itemize
+
+@node Built-in Rules and Makevars
+@chapter Built-in Rules and Makevars
+
+If the @option{--builtins} option is given, the following makevars
+and suffix rules are present by default.
+
+The built-in makevars:
+
+@example
+MAKE=make
+AR=ar
+ARFLAGS=-rv
+YACC=yacc
+YFLAGS=
+LEX=lex
+LFLAGS=
+LDFLAGS=
+CC=cc
+CFLAGS=-g -O2
+FC=gfortran
+FFLAGS=-O1
+GUILE=guile
+GUILD=guild
+GFLAGS=-W2
+@end example
+
+The built-in suffix rules are equivalent to the following.  They
+look up their makevars when they are run, so they honor assignments
+made anywhere in the script.
+
+@example
+(-> ".c" ".o"
+    (~ ($ CC) ($ CFLAGS) "-c" $<))
+
+(-> ".f" ".o"
+    (~ ($ FC) ($ FFLAGS) "-c" $<))
+
+(-> ".y" ".o"
+    (~ ($ YACC) ($ YFLAGS) $<))
+
+(-> ".l" ".o"
+    (~ ($ LEX) ($ LFLAGS) $<)
+    (~ ($ CC) ($ CFLAGS) "-c lex.yy.c")
+    "rm -f lex.yy.c"
+    (~ "mv lex.yy.o" $@@))
+
+(-> ".y" ".c"
+    (~ ($ YACC) ($ YFLAGS) $<)
+    (~ "mv y.tab.c" $@@))
+
+(-> ".l" ".c"
+    (~ ($ LEX) ($ LFLAGS) $<)
+    (~ "mv lex.yy.c" $@@))
+
+(-> ".scm" ".go"
+    (~ ($ GUILD) "compile" ($ GFLAGS) $<))
+@end example
+
+@node Extensions
+@chapter Extensions
+
+Potato Make supports module-based extensions that can decorate
+command-line parsing and initialization.  An extension can contribute
+
+@enumerate
+@item
+additional @code{getopt-long} option entries,
+@item
+additional lines in the @option{--help} output,
+@item
+and an initialization hook that receives the parsed options and can
+update makevars or rules.
+@end enumerate
+
+@deffn Procedure register-extension! #:id id [#:option-spec spec] [#:help-lines lines] [#:init-hook hook]
+Register an extension.  @var{id} identifies the extension;
+registering an @var{id} a second time has no effect.
+
+@var{spec} is a list of option specifications in the format used by
+the @code{(ice-9 getopt-long)} module.  @var{lines} is a list of
+strings to be appended to the @option{--help} output.  @var{hook} is
+a procedure of one argument, the parsed options, as returned by
+@code{getopt-long}.  It is called by @code{initialize}, after the
+makevars have been set up.
+@end deffn
+
+@example
+(register-extension!
+  #:id 'my-extension
+  #:option-spec '((my-flag (value #t)))
+  #:help-lines '("    --my-flag=VALUE"
+                 "        example extension option")
+  #:init-hook (lambda (options)
+                ;; inspect options and set makevars/rules
+                #t))
+@end example
+
+An extension must be registered before @code{initialize} is called.
+If the extension is a module, import it first.
+
+@example
+(use-modules (potato make)
+             (my extension))
+(initialize)
+@end example
+
+@menu
+* Configure Extension::         GNU-style installation directories.
+@end menu
+
+@node Configure Extension
+@section Configure Extension
+
+The @code{(potato configure)} module is an extension that comes with
+Potato Make.  Importing it before calling @code{initialize} adds the
+GNU-style installation directory options, and applies them to makevars
+during initialization.
+
+@example
+(use-modules (potato make)
+             (potato configure))
+
+(initialize)
+;; rules
+(execute)
+@end example
+
+The options from this extension are
+
+@itemize
+@item
+@option{--prefix=@var{dir}}, @option{--exec-prefix=@var{dir}}
+@item
+@option{--bindir=@var{dir}}, @option{--sbindir=@var{dir}},
+@option{--libexecdir=@var{dir}}
+@item
+@option{--datarootdir=@var{dir}}, @option{--datadir=@var{dir}}
+@item
+@option{--sysconfdir=@var{dir}}, @option{--sharedstatedir=@var{dir}},
+@option{--localstatedir=@var{dir}}, @option{--runstatedir=@var{dir}}
+@item
+@option{--includedir=@var{dir}}, @option{--oldincludedir=@var{dir}}
+@item
+@option{--docdir=@var{dir}}, @option{--infodir=@var{dir}},
+@option{--htmldir=@var{dir}}, @option{--dvidir=@var{dir}},
+@option{--pdfdir=@var{dir}}, @option{--psdir=@var{dir}}
+@item
+@option{--libdir=@var{dir}}, @option{--lispdir=@var{dir}},
+@option{--localedir=@var{dir}}
+@item
+@option{--mandir=@var{dir}}, @option{--man1dir=@var{dir}},
+@option{--man2dir=@var{dir}}
+@item
+@option{--srcdir=@var{dir}}
+@end itemize
+
+For example:
+
+@example
+./makefile.scm --prefix=/opt/pkg --exec-prefix=/opt/pkg/exec all
+@end example
+
+After initialization, the directory makevars --- @code{prefix},
+@code{exec_prefix}, @code{bindir}, @code{mandir}, and so on --- are
+set to the defaults from the GNU coding standards, unless overridden
+by one of the options above.
+
+@deffn Procedure add-directory-variables [#:prefix prefix] @dots{} [#:package-name name]
+Set the directory makevars.  There is a keyword argument for each of
+the options above, which overrides the default for that directory.
+@var{name} is the name of the package, which is used in the default
+value of @code{docdir}.
+@end deffn
+
+@node Text and File Name Functions
+@chapter Text and File Name Functions
+
+The @code{(potato lib)} module provides procedures for manipulating
+lists of words and file names, modeled on the functions of GNU
+@command{make}.
+
+@example
+(use-modules (potato make)
+             (potato lib))
+@end example
+
+Most of these procedures operate on a string that holds a list of
+whitespace-separated words, and return a string in which the words
+are separated by single spaces.
+
+Text within single or double quotes is a single word, even if it
+contains whitespace.  The quote characters themselves are removed.
+A quote character of one kind inside quotes of the other kind is an
+ordinary character.  This makes it possible to work with file names
+that contain spaces.
+
+@example
+(words "main.c 'alpha bravo.c'")  @result{}  ("main.c" "alpha bravo.c")
+@end example
+
+@menu
+* Text Functions::
+* Word Functions::
+* File Name Functions::
+@end menu
+
+@node Text Functions
+@section Text Functions
+
+@deffn Procedure words text
+Split @var{text} into a list of words.
+@end deffn
+
+@deffn Syntax W key
+The value of the makevar @var{key}, an unquoted symbol, as a list of
+words.
+@end deffn
+
+@deffn Procedure strip text
+Remove leading and trailing whitespace from @var{text}, and replace
+each internal run of whitespace with a single space.  Whitespace
+within quotes is preserved.
+@end deffn
+
+@deffn Syntax S key
+The value of the makevar @var{key}, an unquoted symbol, stripped.
+@end deffn
+
+@deffn Procedure strip-quotes text
+Remove every single-quote and double-quote character from @var{text}.
+@end deffn
+
+@deffn Procedure findstring find in
+Return @var{find} if it occurs in the string @var{in}.  Otherwise
+return the empty string.
+@end deffn
+
+@deffn Syntax F find-key in-key
+Like @code{findstring}, where both arguments are the names of
+makevars, as unquoted symbols.
+@end deffn
+
+@deffn Procedure subst from to text
+Replace every occurrence of the string @var{from} in @var{text} with
+the string @var{to}.
+
+@example
+(subst "ee" "EE" "feet on the street")  @result{}  "fEEt on the strEEt"
+@end example
+@end deffn
+
+@deffn Procedure patsubst pattern replacement text
+Replace the words in @var{text} that match @var{pattern} with
+@var{replacement}.  @var{pattern} may contain one @samp{%}, which
+matches any number of characters.  A @samp{%} in @var{replacement} is
+replaced by the text that matched.
+
+@example
+(patsubst "%.c" "%.o" "foo.c bar.c baz.h")  @result{}  "foo.o bar.o baz.h"
+@end example
+@end deffn
+
+@deffn Procedure filter-in patterns text
+Return the words in @var{text} that match any of the words in
+@var{patterns}, each of which may contain a @samp{%} wildcard.
+
+@example
+(filter-in "%.c %.h" "foo.c bar.s baz.h")  @result{}  "foo.c baz.h"
+@end example
+@end deffn
+
+@deffn Procedure filter-out patterns text
+Return the words in @var{text} that do @emph{not} match any of the
+words in @var{patterns}.
+@end deffn
+
+@node Word Functions
+@section Word Functions
+
+@deffn Procedure word n text
+Return the @var{n}th word of @var{text}, counting from one, or the
+empty string if there is no such word.
+@end deffn
+
+@deffn Procedure firstword text
+@deffnx Procedure lastword text
+Return the first or the last word of @var{text}, or the empty string
+if @var{text} has no words.
+@end deffn
+
+@deffn Procedure wordlist start end text
+Return the words of @var{text} from position @var{start} through
+position @var{end}, inclusive, counting from one.
+@end deffn
+
+@deffn Procedure sort-list text
+Sort the words of @var{text} and remove any duplicates.
+
+This replaces Guile's own @code{sort-list} procedure in a module that
+imports @code{(potato lib)}.
+@end deffn
+
+@node File Name Functions
+@section File Name Functions
+
+@deffn Procedure file-dir text
+Return the directory part of each file name in @var{text}, including
+the trailing slash.  A name with no directory part gives @samp{./}.
+
+@example
+(file-dir "src/foo.c hacks")  @result{}  "src/ ./"
+@end example
+@end deffn
+
+@deffn Procedure file-notdir text
+Return each file name in @var{text} without its directory part.
+@end deffn
+
+@deffn Procedure file-suffix text
+Return the suffix of each file name in @var{text}, including the
+period.  A name with no suffix gives the empty string.
+@end deffn
+
+@deffn Procedure file-basename text
+Return each file name in @var{text} without its suffix.
+
+@example
+(file-basename "src/foo.c hacks")  @result{}  "src/foo hacks"
+@end example
+@end deffn
+
+@deffn Procedure addprefix prefix text
+@deffnx Procedure addsuffix suffix text
+Add @var{prefix} to the front, or @var{suffix} to the end, of each
+word in @var{text}.
+@end deffn
+
+@deffn Procedure join-two list1 list2
+Concatenate the words of @var{list1} and @var{list2} pairwise.  If
+one list is longer, its extra words are included unchanged.
+
+@example
+(join-two "a b" ".c .o")  @result{}  "a.c b.o"
+@end example
+@end deffn
+
+@deffn Procedure wildcard text
+Expand each of the file name patterns in @var{text}, and return the
+names of the files that exist.  In a pattern, @samp{*} matches any
+number of characters and @samp{?} matches one character.  Wildcards
+are only recognized in the last component of a pattern.  As in the
+shell, a file whose name begins with a period is matched only by a
+pattern that begins with a period.
+
+The matches of each pattern are sorted.
+
+@example
+(wildcard "*.c src/*.c")
+@end example
+@end deffn
+
+@deffn Procedure file-realpath text
+Return the canonical absolute name of each file in @var{text},
+resolving symbolic links.  Files that don't exist are omitted.
+@end deffn
+
+@deffn Procedure file-abspath text
+Return the absolute name of each file in @var{text}, without
+resolving symbolic links.  The @file{.} and @file{..} components are
+resolved lexically.  The files need not exist.
+@end deffn
+
+@node Testing Build Scripts
+@chapter Testing Build Scripts
+
+@deffn Procedure install-alternate-system-driver proc
+Use @var{proc}, in place of Guile's @code{system} procedure, to run
+the command strings of recipes.  @var{proc} is called with the
+command string, and returns an exit status, where zero indicates
+success.  The return value is the driver that was previously
+installed.
+
+This is useful for testing a build script, or for running commands in
+some custom way.
+@end deffn
+
+@example
+(define commands '())
+
+(install-alternate-system-driver
+ (lambda (command)
+   (set! commands (cons command commands))
+   0))
+@end example
+
+@node Procedure Index
+@unnumbered Procedure Index
+
+@printindex fn
+
+@bye

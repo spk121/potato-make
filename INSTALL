@@ -1,0 +1,68 @@
+Installing Potato Make
+======================
+
+Requirements
+------------
+
+  - GNU Guile 3.0 or 2.2, with its development files
+    (the package is called guile-3.0-dev on Debian and Ubuntu,
+    and guile30-devel on Fedora)
+  - make
+
+and, only when building from a Git checkout rather than from a
+release tarball,
+
+  - Autoconf, Automake, and pkg-config
+  - Texinfo
+
+Building
+--------
+
+From a Git checkout, first generate the configure script:
+
+    autoreconf -vif
+
+Then, the usual commands apply:
+
+    ./configure
+    make
+    make check
+    make install
+
+The Scheme modules are installed in
+
+    PREFIX/share/guile/site/GUILE_VERSION/potato
+
+and the compiled modules in
+
+    PREFIX/lib/guile/GUILE_VERSION/site-ccache/potato
+
+where PREFIX is /usr/local unless you pass --prefix to configure.
+Guile only searches the directories beneath its own prefix.  If Guile
+is installed in /usr, either configure with
+
+    ./configure --prefix=/usr
+
+or add the two directories above to the GUILE_LOAD_PATH and
+GUILE_LOAD_COMPILED_PATH environment variables.
+
+Pass --disable-guild to configure to install the modules without
+byte-compiling them.
+
+Using Potato Make without installing it
+---------------------------------------
+
+After running make, the pre-inst-env script runs a command with the
+uninstalled modules on Guile's load path:
+
+    ./pre-inst-env guile -s examples/hello.scm
+
+Documentation
+-------------
+
+The manual is installed in Info format.  To build it in HTML format,
+run
+
+    make html
+
+which creates doc/potato-make.html/index.html.

@@ -1,9 +1,9 @@
-#!/usr/bin/env sh
-exec guile -L . -s "$0" "$@"
-!#
+;;; makevars.scm -- part of the Potato Make test suite.
+
 (use-modules (potato make)
              (srfi srfi-1)
-             (srfi srfi-64))
+             (srfi srfi-64)
+             (tests common))
 
 (test-begin "makevars")
 
@@ -127,6 +127,7 @@ exec guile -L . -s "$0" "$@"
   (begin
     (setenv "MAKEFLAGS" "MAKEFLAGS=IGNORE_THIS")
     (initialize '("test" "--environment"))
+    (unsetenv "MAKEFLAGS")
     ($ MAKEFLAGS)))
 
 (test-equal "Makevar script assignment overrides command-line assignment."
@@ -174,6 +175,7 @@ exec guile -L . -s "$0" "$@"
   (begin
     (setenv "FOO16" "BAR16")
     (initialize '("test" "--elevate-environment"))
+    (unsetenv "FOO16")
     (:= FOO16 "BAZ16")
     ($ FOO16)))
 
@@ -183,9 +185,113 @@ exec guile -L . -s "$0" "$@"
     (initialize '("test" "--builtins"))
     ($ CC)))
 
-(test-end "makevars")
+(test-equal "A transformer applied to an empty makevar gives an empty string."
+  ""
+  (begin
+    (initialize '("test"))
+    (:= EMPTY1 "")
+    ($ EMPTY1 string-upcase)))
 
+(test-equal "A makevar with no value is the empty string."
+  ""
+  (begin
+    (:= EMPTY2)
+    ($ EMPTY2)))
 
-;; Local Variables:
-;; mode: scheme
-;; End:
+(test-equal "A lazy makevar's procedure is not called until it is referenced."
+  '(0 "BAR" 1 "BAR" 1)
+  (let ((calls 0))
+    (?= LAZY1 (lambda () (set! calls (1+ calls)) "BAR"))
+    (let* ((before calls)
+           (first ($ LAZY1))
+           (middle calls)
+           (second ($ LAZY1)))
+      (list before first middle second calls))))
+
+(test-equal "An eager makevar's procedure is called at once."
+  '(1 "BAR")
+  (let ((calls 0))
+    (:= EAGER1 (lambda () (set! calls (1+ calls)) "BAR"))
+    (list calls ($ EAGER1))))
+
+(test-equal "$$ of a lazy procedure makevar yields its string value."
+  "BAR"
+  (begin
+    (?= LAZY2 (lambda () "BAR"))
+    (($$ LAZY2))))
+
+(test-assert "Verbose mode can print makevars, including lazy ones."
+  (let ((out (with-output-to-string
+               (lambda ()
+                 (initialize '("test" "--verbosity=3" "--ascii"))
+                 (?= LAZY3 (lambda () "lazy value"))
+                 (:= TABBED "a\tb")
+                 (:= LONG (make-string 100 #\x))
+                 ($ LAZY3)))))
+    (initialize '("test"))
+    (and (string-contains out "LAZY3")
+         (string-contains out "lazy value")
+         (string-contains out "a<HT>b")
+         (string-contains out "xxx..."))))
+
+(test-assert "dump-makevars lists the makevars and where they came from."
+  (let ((out (with-output-to-string
+               (lambda ()
+                 (initialize '("test" "--ascii" "FROMCLI=1"))
+                 (:= FROMSCRIPT "2")
+                 (?= FROMLAZY (lambda () "3"))
+                 ((@ (potato makevars) dump-makevars))))))
+    (initialize '("test"))
+    (and (string-contains out "FROMCLI -> 1")
+         (string-contains out "command line")
+         (string-contains out "FROMSCRIPT -> 2")
+         (string-contains out "script")
+         (string-contains out "FROMLAZY"))))
+
+(test-error "A key that is neither a string nor a procedure is an error."
+  #t
+  (reference 42 #f))
+
+(test-equal "A command-line makevar overrides the environment."
+  "CLI"
+  (begin
+    (setenv "FOO17" "ENV")
+    (initialize '("test" "--environment" "FOO17=CLI"))
+    (unsetenv "FOO17")
+    ($ FOO17)))
+
+(test-equal "A MAKEFLAGS makevar overrides the environment."
+  "FLAGS"
+  (begin
+    (setenv "FOO18" "ENV")
+    (setenv "MAKEFLAGS" "FOO18=FLAGS")
+    (initialize '("test" "--environment"))
+    (unsetenv "FOO18")
+    (unsetenv "MAKEFLAGS")
+    ($ FOO18)))
+
+(test-equal "The environment overrides a built-in."
+  "ENVCC"
+  (begin
+    (setenv "CC" "ENVCC")
+    (initialize '("test" "--environment" "--builtins"))
+    (unsetenv "CC")
+    ($ CC)))
+
+(test-equal "The environment is not imported without --environment."
+  ""
+  (begin
+    (setenv "FOO19" "ENV")
+    (initialize '("test"))
+    (unsetenv "FOO19")
+    ($ FOO19)))
+
+(test-equal "A script assignment still overrides a built-in in elevate mode."
+  "SCRIPTCC"
+  (begin
+    (unsetenv "CC")
+    (initialize '("test" "--elevate-environment" "--builtins"))
+    (:= CC "SCRIPTCC")
+    ($ CC)))
+
+(test-exit "makevars")
